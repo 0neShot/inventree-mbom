@@ -26,6 +26,7 @@ class ManufacturingBOMPlugin(
     - CO2 emission factor tracking per machine center
     - Pricing bridge: manufacturing costs roll up into InvenTree PartPricing
     - Native UI panel on assembly parts (no standalone SPA required)
+    - Parent-assembly cascaded cost recalculation on rate changes
     """
 
     # Plugin metadata
@@ -94,8 +95,9 @@ class ManufacturingBOMPlugin(
     def get_ui_panels(self, request, context=None, **kwargs):
         """Return UI panels to inject into InvenTree pages.
 
-        Registers a 'Manufacturing Routing (mBOM)' tab on assembly part
-        detail pages only (part.assembly == True).
+        Registers panels on assembly part detail pages:
+        1. 'Manufacturing Routing (mBOM)' - the full routing management tab
+        2. 'Manufacturing Costs' - compact pricing breakdown card
         """
         panels = []
         target_model = context.get("model", "") if context else ""
@@ -106,22 +108,22 @@ class ManufacturingBOMPlugin(
                 from part.models import Part
                 part = Part.objects.get(pk=target_id)
                 if part.assembly:
+                    plugin_slug = PLUGIN_SLUG
+                    # Main routing management tab
                     panels.append({
                         "name": "mbom_routing",
                         "label": _("Manufacturing Routing (mBOM)"),
                         "icon": "fas fa-cogs",
-                        "content_url": self.plugin_url("mbom_panel", pk=target_id),
+                        "content_url": f"/plugin/{plugin_slug}/panel/part/{target_id}/",
+                    })
+                    # Cost breakdown card
+                    panels.append({
+                        "name": "mbom_pricing",
+                        "label": _("Manufacturing Costs"),
+                        "icon": "fas fa-calculator",
+                        "content_url": f"/plugin/{plugin_slug}/pricing-panel/{target_id}/",
                     })
             except Exception:
                 pass
 
         return panels
-
-    def plugin_url(self, name: str, **kwargs) -> str:
-        """Helper to build plugin-namespaced URL."""
-        from django.urls import reverse
-        pk = kwargs.get("pk", "")
-        url_map = {
-            "mbom_panel": f"/plugin/{PLUGIN_SLUG}/panel/part/{pk}/",
-        }
-        return url_map.get(name, "/")

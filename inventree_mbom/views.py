@@ -294,45 +294,37 @@ class PartCostSummaryView(APIView):
         except inventree_part.Part.DoesNotExist:
             return Response({"error": "Part not found"}, status=404)
 
-        # Material cost from InvenTree's native pricing
-        material_cost = Decimal("0.00")
-        try:
-            pricing = part.pricing
-            if pricing and pricing.overall_min is not None:
-                material_cost = pricing.overall_min.amount
-        except Exception:
-            pass
+        # Use the unified pricing engine for a complete breakdown
+        from .pricing import get_assembly_full_cost
 
-        # mBOM costs
         try:
             routing = part.mbom_routing
-            labor_cost = routing.total_labor_cost()
-            machine_cost = routing.total_machine_cost()
-            mfg_cost = routing.total_manufacturing_cost()
-            per_unit_mfg = routing.per_unit_manufacturing_cost()
-            co2 = routing.total_co2_kg()
             batch_size = routing.standard_batch_size
         except PartRouting.DoesNotExist:
-            labor_cost = machine_cost = mfg_cost = per_unit_mfg = co2 = Decimal("0.00")
             batch_size = 1
 
-        total = material_cost + mfg_cost
-        per_unit_total = (
-            material_cost + per_unit_mfg
-        )
+        cost = get_assembly_full_cost(part, batch_size)
 
         return Response({
             "part_id": pk,
-            "part_name": part.name,
-            "batch_size": batch_size,
-            "material_cost": str(material_cost),
-            "labor_cost": str(labor_cost),
-            "machine_cost": str(machine_cost),
-            "manufacturing_cost": str(mfg_cost),
-            "per_unit_manufacturing_cost": str(per_unit_mfg),
-            "total_cost": str(total),
-            "per_unit_total_cost": str(per_unit_total),
-            "co2_kg": str(co2),
+            "part_name": cost['part_name'],
+            "batch_size": cost['batch_size'],
+            # Batch totals
+            "material_cost": str(cost['material_cost_min']),
+            "material_cost_max": str(cost['material_cost_max']),
+            "labor_cost": str(cost['labor_cost']),
+            "machine_cost": str(cost['machine_cost']),
+            "manufacturing_cost": str(cost['mfg_cost']),
+            "co2_kg": str(cost['co2_kg']),
+            # Per-unit
+            "per_unit_material": str(cost['per_unit_material_min']),
+            "per_unit_labor": str(cost['per_unit_labor']),
+            "per_unit_machine": str(cost['per_unit_machine']),
+            "per_unit_manufacturing_cost": str(cost['per_unit_mfg']),
+            "per_unit_total_cost": str(cost['per_unit_total_min']),
+            "per_unit_total_cost_max": str(cost['per_unit_total_max']),
+            # Metadata
+            "has_routing": cost['has_routing'],
         })
 
 
@@ -375,6 +367,74 @@ class MBomPanelView(APIView):
         return HttpResponse(html)
 
 
+
+# ---------------------------------------------------------------------------
+# Pricing Overview Panel (SA4 addition)
+# ---------------------------------------------------------------------------
+
+class MBomPricingPanelView(APIView):
+    """Renders an enriched pricing breakdown panel fragment.
+
+    GET /plugin/inventree-mbom/pricing-panel/<part_pk>/
+
+    Shows:
+     - Material eBOM cost (min/max)
+     - Labor cost (setup + run breakdown)
+     - Machine cost (setup + run breakdown)
+     - CO2 estimate
+     - Per-unit totals and grand total
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk):
+        from django.template.loader import render_to_string
+        from django.http import HttpResponse
+        from .pricing import get_assembly_full_cost
+
+        try:
+            part = inventree_part.Part.objects.get(pk=pk)
+        except inventree_part.Part.DoesNotExist:
+            return Response({'error': 'Part not found'}, status=404)
+
+        try:
+            routing = part.mbom_routing
+            batch_size = routing.standard_batch_size
+        except PartRouting.DoesNotExist:
+            routing = None
+            batch_size = 1
+
+        cost_data = get_assembly_full_cost(part, batch_size)
+
+        # Build per-operation breakdown for display
+        op_breakdown = []
+        if routing:
+            for op in routing.operations.filter(
+                parent_operation__isnull=True, is_active=True
+            ).order_by('sequence_number'):
+                op_breakdown.append({
+                    'sequence_number': op.sequence_number,
+                    'name': op.name,
+                    'labor_rate_name': op.labor_rate.name if op.labor_rate else '—',
+                    'machine_name': op.machine_center.name if op.machine_center else '—',
+                    'setup_time': float(op.setup_time_minutes),
+                    'cycle_time': float(op.run_time_per_unit_minutes),
+                    'labor_cost': float(op.labor_cost(batch_size)),
+                    'machine_cost': float(op.machine_cost(batch_size)),
+                    'total_cost': float(op.total_cost(batch_size)),
+                    'per_unit_cost': float(op.per_unit_cost(batch_size)),
+                    'sub_count': op.sub_operations.count(),
+                })
+
+        ctx = {
+            'part': part,
+            'routing': routing,
+            'cost': cost_data,
+            'op_breakdown': op_breakdown,
+            'plugin_slug': 'inventree-mbom',
+        }
+        html = render_to_string('inventree_mbom/pricing_panel.html', ctx, request=request)
+        return HttpResponse(html)
+
 # ---------------------------------------------------------------------------
 # URL construction
 # ---------------------------------------------------------------------------
@@ -404,4 +464,8 @@ def construct_urls():
         path("cost-summary/<int:pk>/", PartCostSummaryView.as_view(), name="mbom-cost-summary"),
         # Panel HTML
         path("panel/part/<int:pk>/", MBomPanelView.as_view(), name="mbom-panel"),
+        # Pricing overview panel
+        path("pricing-panel/<int:pk>/", MBomPricingPanelView.as_view(), name="mbom-pricing-panel"),
     ]
+
+

@@ -1,0 +1,246 @@
+﻿{% load i18n %}
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+/* Pricing Panel - compact cost breakdown card */
+.mbom-pricing-panel {
+  font-family: inherit;
+  color: inherit;
+  padding: 4px 0;
+}
+
+.mbom-pricing-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--bs-primary, #0d6efd);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+}
+
+.mbom-pricing-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.83rem;
+}
+
+.mbom-pricing-table th {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 8px;
+  text-align: right;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+.mbom-pricing-table th:first-child { text-align: left; }
+
+.mbom-pricing-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+  vertical-align: middle;
+}
+.mbom-pricing-table td:not(:first-child) { text-align: right; }
+.mbom-pricing-table tr:last-child td { border-bottom: none; }
+
+.mbom-pricing-table .row-material td { color: var(--bs-info, #0dcaf0); }
+.mbom-pricing-table .row-labor   td { color: var(--bs-warning, #ffc107); font-weight: 500; }
+.mbom-pricing-table .row-machine td { color: #9b59b6; font-weight: 500; }
+.mbom-pricing-table .row-total   td {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--bs-success, #198754);
+  background: var(--bs-secondary-bg, #f8f9fa);
+  border-top: 2px solid var(--bs-border-color, #dee2e6);
+}
+.mbom-pricing-table .row-co2 td { opacity: 0.65; font-size: 0.78rem; }
+
+.mbom-op-breakdown {
+  margin-top: 14px;
+}
+
+.mbom-op-breakdown-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.6;
+  margin-bottom: 6px;
+}
+
+.mbom-op-row {
+  display: grid;
+  grid-template-columns: 40px 1fr auto auto;
+  gap: 6px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+  font-size: 0.8rem;
+  align-items: center;
+}
+
+.mbom-op-row:last-child { border-bottom: none; }
+
+.mbom-op-seq {
+  background: var(--bs-secondary, #6c757d);
+  color: #fff;
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 0.72rem;
+  text-align: center;
+  font-weight: 700;
+}
+
+.mbom-op-cost {
+  font-weight: 600;
+  color: var(--bs-success, #198754);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.mbom-no-routing {
+  padding: 12px 0;
+  text-align: center;
+  opacity: 0.45;
+  font-size: 0.82rem;
+}
+
+.mbom-batch-note {
+  font-size: 0.72rem;
+  opacity: 0.5;
+  margin-top: 8px;
+  text-align: right;
+}
+</style>
+</head>
+<body>
+<div class="mbom-pricing-panel">
+
+  {% if not cost.has_routing %}
+    <div class="mbom-no-routing">
+      <i class="fas fa-route"></i>
+      {% trans "No manufacturing routing defined — add operations in the mBOM tab." %}
+    </div>
+  {% else %}
+
+  <div class="mbom-pricing-title">
+    <i class="fas fa-calculator"></i>
+    {% trans "Assembly Cost Breakdown" %}
+    <span style="font-size:0.72rem;font-weight:400;margin-left:auto;opacity:0.6;">
+      {% trans "batch" %} × {{ cost.batch_size }}
+    </span>
+  </div>
+
+  <!-- Cost breakdown table -->
+  <table class="mbom-pricing-table">
+    <thead>
+      <tr>
+        <th>{% trans "Component" %}</th>
+        <th>{% trans "Per Unit" %}</th>
+        <th>{% trans "Batch Total" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Material -->
+      <tr class="row-material">
+        <td>
+          <i class="fas fa-boxes" style="width:14px;"></i>
+          {% trans "Material (eBOM)" %}
+        </td>
+        <td>{{ cost.per_unit_material_min|floatformat:4 }} EUR</td>
+        <td>{{ cost.material_cost_min|floatformat:4 }} EUR</td>
+      </tr>
+
+      <!-- Labor -->
+      <tr class="row-labor">
+        <td>
+          <i class="fas fa-user-hard-hat" style="width:14px;"></i>
+          {% trans "Labor" %}
+        </td>
+        <td>{{ cost.per_unit_labor|floatformat:4 }} EUR</td>
+        <td>{{ cost.labor_cost|floatformat:4 }} EUR</td>
+      </tr>
+
+      <!-- Machine -->
+      <tr class="row-machine">
+        <td>
+          <i class="fas fa-cog" style="width:14px;"></i>
+          {% trans "Machine" %}
+        </td>
+        <td>{{ cost.per_unit_machine|floatformat:4 }} EUR</td>
+        <td>{{ cost.machine_cost|floatformat:4 }} EUR</td>
+      </tr>
+
+      <!-- Total -->
+      <tr class="row-total">
+        <td>
+          <i class="fas fa-equals" style="width:14px;"></i>
+          {% trans "Total Assembly" %}
+        </td>
+        <td>{{ cost.per_unit_total_min|floatformat:4 }} EUR</td>
+        <td>—</td>
+      </tr>
+
+      <!-- CO2 -->
+      <tr class="row-co2">
+        <td>
+          <i class="fas fa-leaf" style="width:14px;color:#27ae60"></i>
+          {% trans "CO₂ Estimate" %}
+        </td>
+        <td colspan="2" style="text-align:right;">
+          {{ cost.co2_kg|floatformat:4 }} kg ({% trans "total batch" %})
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="mbom-batch-note">
+    {% blocktrans with size=cost.batch_size %}
+      Costs shown for a standard batch of {{ size }} unit(s).
+      Setup costs are amortised across the batch.
+    {% endblocktrans %}
+  </div>
+
+  <!-- Per-operation breakdown -->
+  {% if op_breakdown %}
+  <div class="mbom-op-breakdown">
+    <div class="mbom-op-breakdown-title">
+      <i class="fas fa-list"></i> {% trans "Operation Detail" %}
+    </div>
+
+    {% for op in op_breakdown %}
+    <div class="mbom-op-row">
+      <span class="mbom-op-seq">{{ op.sequence_number }}</span>
+      <div>
+        <strong>{{ op.name }}</strong>
+        <br>
+        <span style="opacity:0.55;font-size:0.72rem;">
+          {{ op.labor_rate_name }}
+          {% if op.machine_name != "—" %} / {{ op.machine_name }}{% endif %}
+          &bull; Setup {{ op.setup_time|floatformat:1 }}min
+          &bull; Cycle {{ op.cycle_time|floatformat:2 }}min/unit
+          {% if op.sub_count > 0 %}
+            &bull; <em>+{{ op.sub_count }} sub-step(s)</em>
+          {% endif %}
+        </span>
+      </div>
+      <div style="opacity:0.55;font-size:0.72rem;text-align:right;">
+        /unit
+      </div>
+      <div class="mbom-op-cost">
+        {{ op.per_unit_cost|floatformat:4 }} EUR
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% endif %}
+
+</div>
+</body>
+</html>

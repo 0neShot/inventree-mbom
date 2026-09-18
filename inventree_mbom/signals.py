@@ -1,94 +1,125 @@
-﻿"""Django signals for the inventree-mbom plugin.
+﻿"""Django signal handlers for the inventree-mbom plugin.
 
 Pricing Bridge:
-    When a LaborRate or MachineCenter hourly_rate changes, we need to
-    invalidate and recalculate InvenTree PartPricing for all affected parts.
+    When a LaborRate or MachineCenter rate is changed, we need all affected
+    assembly parts (and their parents) to have their pricing recalculated.
 
-    Strategy: post_save signals on LaborRate/MachineCenter trigger
-    PartPricing.schedule_for_update() on all parts with routings
-    that reference the changed rate.
+    Uses MbomPricingService.schedule_for_affected_parts() which:
+    1. Finds all RoutingOperations referencing the changed rate
+    2. Calls PartPricing.schedule_for_update() on each affected part
+    3. Cascades UP to parent assemblies via BomItem relationships
+       (so a sub-assembly rate change bubbles up to top-level assemblies)
 
-    This is non-invasive - no InvenTree core files are modified.
+    Also hooks RoutingOperation.save/delete to keep individual part pricing fresh.
 """
 
 import logging
-
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 
-logger = logging.getLogger("inventree_mbom")
+logger = logging.getLogger('inventree_mbom')
 
 
-@receiver(post_save, sender="inventree_mbom.LaborRate")
-def on_labor_rate_saved(sender, instance, **kwargs):
-    """Trigger pricing recalculation for all parts using this labor rate."""
-    _schedule_pricing_update_for_rate(instance, "labor_rate")
+# =========================================================
+# Rate change signals → cascade pricing update
+# =========================================================
+
+@receiver(post_save, sender='inventree_mbom.LaborRate')
+def on_labor_rate_saved(sender, instance, created, **kwargs):
+    """Recalculate pricing for all parts using this labor rate."""
+    if created:
+        return  # New rate has no operations yet
+
+    _check_and_schedule(instance, 'labor_rate')
 
 
-@receiver(post_save, sender="inventree_mbom.MachineCenter")
-def on_machine_center_saved(sender, instance, **kwargs):
-    """Trigger pricing recalculation for all parts using this machine center."""
-    _schedule_pricing_update_for_rate(instance, "machine_center")
+@receiver(post_save, sender='inventree_mbom.MachineCenter')
+def on_machine_center_saved(sender, instance, created, **kwargs):
+    """Recalculate pricing for all parts using this machine center."""
+    if created:
+        return
+
+    _check_and_schedule(instance, 'machine_center')
 
 
-def _schedule_pricing_update_for_rate(rate_instance, rate_field: str):
-    """Schedule pricing recalculation for all parts with routing operations
-    referencing the given rate instance.
-    """
+def _check_and_schedule(rate_instance, rate_field: str):
+    """Check plugin setting and schedule pricing updates if auto-recalc is on."""
     try:
         from plugin.registry import registry
         from . import PLUGIN_SLUG
 
         plugin = registry.get_plugin(PLUGIN_SLUG)
-        if not plugin:
+        if plugin and not plugin.get_setting('AUTO_RECALCULATE'):
+            logger.debug('mBOM: AUTO_RECALCULATE is off; skipping update for %s', rate_instance)
             return
 
-        if not plugin.get_setting("AUTO_RECALCULATE"):
-            return
+    except Exception:
+        pass  # Plugin not loaded yet; proceed anyway
 
-        from .models import RoutingOperation
-
-        filter_kwargs = {rate_field: rate_instance}
-        affected_routings = set(
-            RoutingOperation.objects.filter(**filter_kwargs)
-            .values_list("routing__part_id", flat=True)
-            .distinct()
-        )
-
-        if not affected_routings:
-            return
-
-        logger.info(
-            "inventree-mbom: Rate '%s' (pk=%s) changed; scheduling pricing "
-            "recalculation for %d parts.",
-            rate_instance,
-            rate_instance.pk,
-            len(affected_routings),
-        )
-
-        try:
-            from part.models import PartPricing
-
-            for part_id in affected_routings:
-                try:
-                    pricing = PartPricing.objects.get(part_id=part_id)
-                    pricing.schedule_for_update()
-                except PartPricing.DoesNotExist:
-                    pass
-                except Exception as exc:
-                    logger.warning(
-                        "inventree-mbom: Failed to schedule pricing update "
-                        "for part %s: %s",
-                        part_id,
-                        exc,
-                    )
-        except ImportError:
-            logger.warning(
-                "inventree-mbom: PartPricing model not available; "
-                "skipping auto-recalculation."
+    try:
+        from .pricing import MbomPricingService
+        count = MbomPricingService.schedule_for_affected_parts(rate_instance, rate_field)
+        if count:
+            logger.info(
+                'mBOM: %s "%s" changed → %d part pricing schedules updated',
+                rate_field, rate_instance, count
             )
+    except Exception as exc:
+        logger.error('mBOM: Error scheduling pricing updates: %s', exc, exc_info=True)
+
+
+# =========================================================
+# RoutingOperation save/delete → update this part's pricing
+# =========================================================
+
+@receiver(post_save, sender='inventree_mbom.RoutingOperation')
+def on_routing_operation_saved(sender, instance, **kwargs):
+    """Invalidate pricing when an operation is added or updated."""
+    _schedule_routing_part(instance)
+
+
+@receiver(post_delete, sender='inventree_mbom.RoutingOperation')
+def on_routing_operation_deleted(sender, instance, **kwargs):
+    """Invalidate pricing when an operation is removed."""
+    _schedule_routing_part(instance)
+
+
+def _schedule_routing_part(operation):
+    """Schedule pricing update for the part that owns this operation."""
+    try:
+        part_id = operation.routing.part_id
+        from .pricing import MbomPricingService
+        MbomPricingService.schedule_for_update(part_id)
+
+        # Also cascade to parent assemblies
+        try:
+            from part.models import BomItem
+            parent_ids = list(
+                BomItem.objects
+                .filter(sub_part_id=part_id)
+                .values_list('part_id', flat=True)
+                .distinct()
+            )
+            for pid in parent_ids:
+                MbomPricingService.schedule_for_update(pid)
+        except Exception:
+            pass
 
     except Exception as exc:
-        logger.error(
-            "inventree-mbom: Error in pricing update signal handler: %s", exc
-        )
+        logger.debug('mBOM: Could not schedule part pricing update: %s', exc)
+
+
+# =========================================================
+# PartRouting save → try to write extra cost immediately
+# =========================================================
+
+@receiver(post_save, sender='inventree_mbom.PartRouting')
+def on_part_routing_saved(sender, instance, **kwargs):
+    """When a routing is saved, attempt to push costs to InvenTree pricing."""
+    try:
+        from .pricing import MbomPricingService
+        MbomPricingService.schedule_for_update(instance.part_id)
+        # Best-effort extra cost write
+        MbomPricingService.write_extra_cost(instance.part)
+    except Exception as exc:
+        logger.debug('mBOM: post_save on PartRouting pricing update: %s', exc)

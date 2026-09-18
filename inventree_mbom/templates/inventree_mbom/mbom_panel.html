@@ -1,754 +1,293 @@
-﻿{% load i18n %}
+﻿{% load i18n static %}
 <!DOCTYPE html>
 <html>
 <head>
-<style>
-/* =========================================================
-   inventree-mbom: Manufacturing Routing Panel Styles
-   Respects InvenTree native dark/light theme via CSS vars
-   ========================================================= */
-
-.mbom-panel {
-  font-family: inherit;
-  color: inherit;
-  padding: 0;
-}
-
-/* Header bar */
-.mbom-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 0 16px 0;
-  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
-  flex-wrap: wrap;
-}
-
-.mbom-header h5 {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-  flex: 1;
-}
-
-/* Cost summary cards */
-.mbom-cost-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
-  margin: 14px 0;
-}
-
-.mbom-cost-card {
-  background: var(--bs-secondary-bg, #f8f9fa);
-  border: 1px solid var(--bs-border-color, #dee2e6);
-  border-radius: 8px;
-  padding: 10px 14px;
-  text-align: center;
-  transition: box-shadow 0.2s ease;
-}
-
-.mbom-cost-card:hover {
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-
-.mbom-cost-card .cost-label {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  opacity: 0.65;
-  margin-bottom: 4px;
-}
-
-.mbom-cost-card .cost-value {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--bs-primary, #0d6efd);
-}
-
-.mbom-cost-card.total .cost-value {
-  color: var(--bs-success, #198754);
-}
-
-/* Operations table */
-.mbom-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.87rem;
-  margin-top: 12px;
-}
-
-.mbom-table th {
-  background: var(--bs-secondary-bg, #f8f9fa);
-  border-bottom: 2px solid var(--bs-border-color, #dee2e6);
-  padding: 8px 10px;
-  text-align: left;
-  font-weight: 600;
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-
-.mbom-table td {
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
-  vertical-align: middle;
-}
-
-.mbom-table tr.op-parent td {
-  font-weight: 600;
-  background: var(--bs-tertiary-bg, #fafafa);
-}
-
-.mbom-table tr.op-child td {
-  padding-left: 30px;
-  font-size: 0.83rem;
-  opacity: 0.9;
-}
-
-.mbom-table tr.op-child td:first-child::before {
-  content: "↳ ";
-  opacity: 0.5;
-}
-
-.mbom-table tr:last-child td {
-  border-bottom: none;
-}
-
-/* Toggle collapse for sub-ops */
-.toggle-children {
-  cursor: pointer;
-  background: none;
-  border: none;
-  color: var(--bs-primary, #0d6efd);
-  padding: 0 4px;
-  font-size: 0.75rem;
-}
-
-/* Action buttons */
-.mbom-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 12px;
-  border: none;
-  border-radius: 5px;
-  font-size: 0.82rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: opacity 0.15s ease, transform 0.1s ease;
-}
-
-.mbom-btn:hover { opacity: 0.85; transform: translateY(-1px); }
-.mbom-btn:active { transform: translateY(0); }
-
-.mbom-btn-primary { background: var(--bs-primary, #0d6efd); color: #fff; }
-.mbom-btn-success { background: var(--bs-success, #198754); color: #fff; }
-.mbom-btn-danger { background: var(--bs-danger, #dc3545); color: #fff; }
-.mbom-btn-secondary { background: var(--bs-secondary, #6c757d); color: #fff; }
-.mbom-btn-warning { background: var(--bs-warning, #ffc107); color: #000; }
-
-/* Modal overlay */
-.mbom-modal-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.45);
-  z-index: 9998;
-  align-items: center;
-  justify-content: center;
-}
-
-.mbom-modal-overlay.active {
-  display: flex;
-}
-
-.mbom-modal {
-  background: var(--bs-body-bg, #fff);
-  color: var(--bs-body-color, #212529);
-  border: 1px solid var(--bs-border-color, #dee2e6);
-  border-radius: 10px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
-  padding: 24px 28px;
-  width: 520px;
-  max-width: 96vw;
-  max-height: 85vh;
-  overflow-y: auto;
-  animation: mbom-slide-in 0.18s ease;
-}
-
-@keyframes mbom-slide-in {
-  from { opacity: 0; transform: translateY(-16px) scale(0.97); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.mbom-modal h6 {
-  margin: 0 0 18px 0;
-  font-size: 1rem;
-  font-weight: 700;
-}
-
-.mbom-form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.mbom-form-group {
-  margin-bottom: 12px;
-}
-
-.mbom-form-group label {
-  display: block;
-  font-size: 0.8rem;
-  font-weight: 600;
-  margin-bottom: 4px;
-  opacity: 0.8;
-}
-
-.mbom-form-group input,
-.mbom-form-group select,
-.mbom-form-group textarea {
-  width: 100%;
-  padding: 7px 10px;
-  border: 1px solid var(--bs-border-color, #dee2e6);
-  border-radius: 5px;
-  font-size: 0.85rem;
-  background: var(--bs-body-bg, #fff);
-  color: var(--bs-body-color, #212529);
-  box-sizing: border-box;
-  transition: border-color 0.15s ease;
-}
-
-.mbom-form-group input:focus,
-.mbom-form-group select:focus,
-.mbom-form-group textarea:focus {
-  outline: none;
-  border-color: var(--bs-primary, #0d6efd);
-  box-shadow: 0 0 0 2px rgba(13,110,253,0.15);
-}
-
-.mbom-modal-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid var(--bs-border-color, #dee2e6);
-}
-
-/* Empty state */
-.mbom-empty {
-  text-align: center;
-  padding: 32px 20px;
-  opacity: 0.55;
-}
-
-.mbom-empty i {
-  font-size: 2.5rem;
-  display: block;
-  margin-bottom: 10px;
-}
-
-/* Loading spinner */
-.mbom-spinner {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 2px solid transparent;
-  border-top-color: currentColor;
-  border-radius: 50%;
-  animation: mbom-spin 0.7s linear infinite;
-}
-
-@keyframes mbom-spin { to { transform: rotate(360deg); } }
-
-/* CO2 badge */
-.mbom-co2 {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.75rem;
-  color: var(--bs-success, #198754);
-  opacity: 0.85;
-}
-</style>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="{% static 'inventree_mbom/css/mbom.css' %}">
 </head>
 <body>
-<div class="mbom-panel" id="mbom-panel-root">
+<div class="mbom-root" id="mbom-root">
 
-  <!-- Header -->
-  <div class="mbom-header">
-    <h5><i class="fas fa-cogs"></i> {% trans "Manufacturing Routing (mBOM)" %}</h5>
+  <!-- ===================== Toolbar ===================== -->
+  <div class="mbom-toolbar">
+    <h5 class="mbom-toolbar-title">
+      <i class="fas fa-cogs"></i>
+      {% trans "Manufacturing Routing (mBOM)" %}
+      {% if routing %}
+        <span style="font-size:0.72rem;font-weight:400;opacity:0.55;margin-left:4px;">
+          #{{ routing.pk }}
+        </span>
+      {% endif %}
+    </h5>
 
-    {% if routing %}
-      <span class="mbom-co2" title="CO2 estimate">
-        <i class="fas fa-leaf"></i>
-        <span id="mbom-co2-value">--</span> kg CO₂
-      </span>
-    {% endif %}
+    <!-- Batch size control -->
+    <div class="mbom-batch-info">
+      <i class="fas fa-layer-group" title="Standard batch size"></i>
+      <label for="mbom-batch-input" style="margin:0;font-size:0.78rem;">Batch:</label>
+      <input type="number" id="mbom-batch-input"
+             value="{{ routing.standard_batch_size|default:1 }}"
+             min="1" style="width:64px;"
+             onchange="window._mbomPanel && window._mbomPanel.updateBatchSize()">
+    </div>
 
-    <button class="mbom-btn mbom-btn-primary" onclick="mbom.showApplyTemplateModal()">
-      <i class="fas fa-magic"></i> {% trans "Apply Template" %}
-    </button>
-    <button class="mbom-btn mbom-btn-success" onclick="mbom.showAddOperationModal()">
-      <i class="fas fa-plus"></i> {% trans "Add Operation" %}
-    </button>
+    <div class="mbom-toolbar-actions">
+      <button class="mbom-btn mbom-btn--ghost"
+              onclick="window._mbomPanel && window._mbomPanel.showApplyTemplateDialog()"
+              title="Seed routing from a process template">
+        <i class="fas fa-magic"></i>
+        <span>{% trans "Apply Template" %}</span>
+      </button>
+      <button class="mbom-btn mbom-btn--success"
+              onclick="window._mbomPanel && window._mbomPanel.showAddOpModal()"
+              title="Add a new operation manually">
+        <i class="fas fa-plus"></i>
+        <span>{% trans "Add Operation" %}</span>
+      </button>
+    </div>
   </div>
 
-  <!-- Cost Summary Cards -->
-  <div class="mbom-cost-summary" id="mbom-cost-summary">
-    <div class="mbom-cost-card">
-      <div class="cost-label">{% trans "Material (eBOM)" %}</div>
-      <div class="cost-value" id="mbom-material-cost">--</div>
+  <!-- ===================== Cost Summary Cards ===================== -->
+  <div class="mbom-summary-grid">
+
+    <div class="mbom-card mbom-card--material">
+      <div class="mbom-card__label">
+        <i class="fas fa-boxes"></i> {% trans "Material (eBOM)" %}
+      </div>
+      <div class="mbom-card__value loading" id="mbom-c-material">…</div>
+      <div class="mbom-card__sub">{% trans "native InvenTree pricing" %}</div>
     </div>
-    <div class="mbom-cost-card">
-      <div class="cost-label">{% trans "Labor" %}</div>
-      <div class="cost-value" id="mbom-labor-cost">--</div>
+
+    <div class="mbom-card mbom-card--labor">
+      <div class="mbom-card__label">
+        <i class="fas fa-user-hard-hat"></i> {% trans "Labor" %}
+      </div>
+      <div class="mbom-card__value loading" id="mbom-c-labor">…</div>
+      <div class="mbom-card__sub">{% trans "setup + cycle × qty" %}</div>
     </div>
-    <div class="mbom-cost-card">
-      <div class="cost-label">{% trans "Machine" %}</div>
-      <div class="cost-value" id="mbom-machine-cost">--</div>
+
+    <div class="mbom-card mbom-card--machine">
+      <div class="mbom-card__label">
+        <i class="fas fa-cog"></i> {% trans "Machine" %}
+      </div>
+      <div class="mbom-card__value loading" id="mbom-c-machine">…</div>
+      <div class="mbom-card__sub">{% trans "setup + cycle × qty" %}</div>
     </div>
-    <div class="mbom-cost-card total">
-      <div class="cost-label">{% trans "Total / Unit" %}</div>
-      <div class="cost-value" id="mbom-total-cost">--</div>
+
+    <div class="mbom-card mbom-card--total">
+      <div class="mbom-card__label">
+        <i class="fas fa-calculator"></i> {% trans "Total / Unit" %}
+      </div>
+      <div class="mbom-card__value loading" id="mbom-c-total">…</div>
+      <div class="mbom-card__sub">
+        {% trans "batch" %}: <span id="mbom-batch-display">{{ routing.standard_batch_size|default:1 }}</span>
+      </div>
+    </div>
+
+    <div class="mbom-card mbom-card--co2" style="grid-column: span 1;">
+      <div class="mbom-card__label">
+        <i class="fas fa-leaf"></i> CO₂
+      </div>
+      <div class="mbom-card__value loading" id="mbom-c-co2">…</div>
+      <div class="mbom-card__sub">{% trans "total batch emissions" %}</div>
+    </div>
+
+  </div>
+
+  <!-- ===================== Operations Table / Empty State ===================== -->
+  <div id="mbom-ops-container">
+    <!-- Populated by JS -->
+    <div class="mbom-empty">
+      <i class="fas fa-route mbom-empty__icon"></i>
+      <div class="mbom-empty__title">{% trans "Loading routing…" %}</div>
     </div>
   </div>
 
-  <!-- Operations Table -->
-  <div id="mbom-operations-container">
-    {% if routing %}
-      <table class="mbom-table" id="mbom-ops-table">
-        <thead>
-          <tr>
-            <th>{% trans "Seq" %}</th>
-            <th>{% trans "Operation" %}</th>
-            <th>{% trans "Labor Rate" %}</th>
-            <th>{% trans "Machine" %}</th>
-            <th>{% trans "Setup (min)" %}</th>
-            <th>{% trans "Cycle (min/unit)" %}</th>
-            <th>{% trans "Unit Cost" %}</th>
-            <th>{% trans "Actions" %}</th>
-          </tr>
-        </thead>
-        <tbody id="mbom-ops-tbody">
-          <tr><td colspan="8" style="text-align:center;padding:20px;">
-            <span class="mbom-spinner"></span> {% trans "Loading operations..." %}
-          </td></tr>
-        </tbody>
-      </table>
-    {% else %}
-      <div class="mbom-empty" id="mbom-empty-state">
-        <i class="fas fa-route"></i>
-        <div>{% trans "No manufacturing routing defined for this assembly." %}</div>
-        <div style="margin-top:8px;font-size:0.85rem;">
-          {% trans "Apply a process template or add operations manually to get started." %}
+</div><!-- /mbom-root -->
+
+
+<!-- ===================== Apply Template Dialog ===================== -->
+<div class="mbom-backdrop" id="mbom-tmpl-backdrop">
+  <div class="mbom-dialog">
+    <div class="mbom-dialog__header">
+      <h6 class="mbom-dialog__title">
+        <i class="fas fa-magic"></i>
+        {% trans "Apply Process Template" %}
+      </h6>
+      <button class="mbom-dialog__close" onclick="window._mbomPanel && window._mbomPanel._closeDialogs()">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="mbom-dialog__body">
+      <div class="mbom-form-grid full">
+        <div class="mbom-field">
+          <label>{% trans "Process Template" %}</label>
+          <select id="mbom-tmpl-select">
+            <option value="">— {% trans "Select a template" %} —</option>
+            {% for t in templates %}
+              <option value="{{ t.pk }}">{{ t.name }}</option>
+            {% empty %}
+              <option disabled>{% trans "No templates defined yet" %}</option>
+            {% endfor %}
+          </select>
         </div>
       </div>
-    {% endif %}
-  </div>
-
-</div>
-
-<!-- ===================== Apply Template Modal ===================== -->
-<div class="mbom-modal-overlay" id="mbom-template-modal">
-  <div class="mbom-modal">
-    <h6><i class="fas fa-magic"></i> {% trans "Apply Process Template" %}</h6>
-    <div class="mbom-form-group">
-      <label>{% trans "Process Template" %}</label>
-      <select id="mbom-template-select">
-        <option value="">-- {% trans "Select a template" %} --</option>
-        {% for t in templates %}
-          <option value="{{ t.pk }}">{{ t.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="mbom-form-row">
-      <div class="mbom-form-group">
-        <label>{% trans "Batch Size" %}</label>
-        <input type="number" id="mbom-template-batch" value="1" min="1">
-      </div>
-      <div class="mbom-form-group">
-        <label>{% trans "Overwrite existing?" %}</label>
-        <select id="mbom-template-overwrite">
-          <option value="false">{% trans "No (skip if exists)" %}</option>
-          <option value="true">{% trans "Yes (replace operations)" %}</option>
-        </select>
+      <div class="mbom-form-grid" style="margin-top:10px;">
+        <div class="mbom-field">
+          <label>{% trans "Standard Batch Size" %}</label>
+          <input type="number" id="mbom-tmpl-batch" value="{{ routing.standard_batch_size|default:1 }}" min="1">
+        </div>
+        <div class="mbom-field">
+          <label>{% trans "If routing already exists" %}</label>
+          <select id="mbom-tmpl-overwrite">
+            <option value="false">{% trans "Keep existing (skip)" %}</option>
+            <option value="true">{% trans "Overwrite (replace operations)" %}</option>
+          </select>
+        </div>
       </div>
     </div>
-    <div class="mbom-modal-actions">
-      <button class="mbom-btn mbom-btn-secondary" onclick="mbom.closeModals()">{% trans "Cancel" %}</button>
-      <button class="mbom-btn mbom-btn-primary" onclick="mbom.applyTemplate()">
-        <i class="fas fa-check"></i> {% trans "Apply" %}
+    <div class="mbom-dialog__footer">
+      <button class="mbom-btn mbom-btn--ghost"
+              onclick="window._mbomPanel && window._mbomPanel._closeDialogs()">
+        {% trans "Cancel" %}
+      </button>
+      <button class="mbom-btn mbom-btn--primary" id="mbom-tmpl-apply-btn"
+              onclick="window._mbomPanel && window._mbomPanel.applyTemplate()">
+        <i class="fas fa-magic"></i> {% trans "Apply" %}
       </button>
     </div>
   </div>
 </div>
 
-<!-- ===================== Add/Edit Operation Modal ===================== -->
-<div class="mbom-modal-overlay" id="mbom-op-modal">
-  <div class="mbom-modal">
-    <h6 id="mbom-op-modal-title"><i class="fas fa-plus"></i> {% trans "Add Operation" %}</h6>
-    <input type="hidden" id="mbom-op-id" value="">
-    <div class="mbom-form-row">
-      <div class="mbom-form-group">
-        <label>{% trans "Sequence Number" %}</label>
-        <input type="text" id="mbom-op-seq" placeholder="e.g. 10, 10.1, 20">
-      </div>
-      <div class="mbom-form-group">
-        <label>{% trans "Parent Operation (optional)" %}</label>
-        <select id="mbom-op-parent">
-          <option value="">-- {% trans "None (top-level)" %} --</option>
-        </select>
+
+<!-- ===================== Add / Edit Operation Dialog ===================== -->
+<div class="mbom-backdrop" id="mbom-op-backdrop">
+  <div class="mbom-dialog">
+    <div class="mbom-dialog__header">
+      <h6 class="mbom-dialog__title" id="mbom-op-dialog-title">
+        <i class="fas fa-plus"></i> {% trans "Add Operation" %}
+      </h6>
+      <button class="mbom-dialog__close" onclick="window._mbomPanel && window._mbomPanel._closeDialogs()">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="mbom-dialog__body">
+      <input type="hidden" id="mbom-op-id">
+      <div class="mbom-form-grid">
+
+        <div class="mbom-field">
+          <label>{% trans "Sequence Number" %} *</label>
+          <input type="text" id="mbom-op-seq" placeholder="e.g. 10, 10.1, 20">
+        </div>
+
+        <div class="mbom-field" id="mbom-op-parent-field">
+          <label>{% trans "Parent Operation" %}</label>
+          <select id="mbom-op-parent">
+            <option value="">— {% trans "None (top-level)" %} —</option>
+            <!-- Populated by JS -->
+          </select>
+        </div>
+
+        <div class="mbom-field" style="grid-column: 1 / -1;">
+          <label>{% trans "Operation Name" %} *</label>
+          <input type="text" id="mbom-op-name" placeholder="e.g. SMT Assembly, CNC Turning, Final Inspection">
+        </div>
+
+        <!-- Section: Resources -->
+        <div class="mbom-field--section-label">
+          <i class="fas fa-users-cog"></i> {% trans "Resources" %}
+        </div>
+
+        <div class="mbom-field">
+          <label>{% trans "Labor Rate" %}</label>
+          <select id="mbom-op-labor">
+            <option value="">— {% trans "None" %} —</option>
+            {% for lr in labor_rates %}
+              <option value="{{ lr.pk }}">{{ lr.name }}  ({{ lr.hourly_rate }} {{ lr.currency }}/hr)</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="mbom-field">
+          <label>{% trans "Machine Center" %}</label>
+          <select id="mbom-op-machine">
+            <option value="">— {% trans "None" %} —</option>
+            {% for mc in machine_centers %}
+              <option value="{{ mc.pk }}">{{ mc.name }}  ({{ mc.hourly_rate }} {{ mc.currency }}/hr)</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Section: Times -->
+        <div class="mbom-field--section-label">
+          <i class="fas fa-clock"></i> {% trans "Cycle Times" %}
+        </div>
+
+        <div class="mbom-field">
+          <label>{% trans "Setup Time (min)" %}</label>
+          <input type="number" id="mbom-op-setup" value="0" min="0" step="0.01"
+                 placeholder="Fixed per batch">
+        </div>
+
+        <div class="mbom-field">
+          <label>{% trans "Cycle Time / Unit (min)" %}</label>
+          <input type="number" id="mbom-op-cycle" value="0" min="0" step="0.01"
+                 placeholder="Recurring per unit">
+        </div>
+
+        <!-- Section: Notes -->
+        <div class="mbom-field--section-label">
+          <i class="fas fa-sticky-note"></i> {% trans "Notes" %}
+        </div>
+
+        <div class="mbom-field" style="grid-column: 1 / -1;">
+          <label>{% trans "Description / Tool Notes" %}</label>
+          <textarea id="mbom-op-desc" rows="2"
+                    placeholder="{% trans 'Optional tool spec, fixture ID, quality note…' %}"></textarea>
+        </div>
+
       </div>
     </div>
-    <div class="mbom-form-group">
-      <label>{% trans "Operation Name" %}</label>
-      <input type="text" id="mbom-op-name" placeholder="e.g. SMT Assembly, CNC Turning">
-    </div>
-    <div class="mbom-form-row">
-      <div class="mbom-form-group">
-        <label>{% trans "Labor Rate" %}</label>
-        <select id="mbom-op-labor">
-          <option value="">-- {% trans "None" %} --</option>
-          {% for lr in labor_rates %}
-            <option value="{{ lr.pk }}">{{ lr.name }} ({{ lr.hourly_rate }} {{ lr.currency }}/hr)</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="mbom-form-group">
-        <label>{% trans "Machine Center" %}</label>
-        <select id="mbom-op-machine">
-          <option value="">-- {% trans "None" %} --</option>
-          {% for mc in machine_centers %}
-            <option value="{{ mc.pk }}">{{ mc.name }} ({{ mc.hourly_rate }} {{ mc.currency }}/hr)</option>
-          {% endfor %}
-        </select>
-      </div>
-    </div>
-    <div class="mbom-form-row">
-      <div class="mbom-form-group">
-        <label>{% trans "Setup Time (min)" %}</label>
-        <input type="number" id="mbom-op-setup" value="0" min="0" step="0.01">
-      </div>
-      <div class="mbom-form-group">
-        <label>{% trans "Cycle Time / Unit (min)" %}</label>
-        <input type="number" id="mbom-op-cycle" value="0" min="0" step="0.01">
-      </div>
-    </div>
-    <div class="mbom-form-group">
-      <label>{% trans "Description / Tool Notes" %}</label>
-      <textarea id="mbom-op-desc" rows="2" placeholder="{% trans "Optional notes" %}"></textarea>
-    </div>
-    <div class="mbom-modal-actions">
-      <button class="mbom-btn mbom-btn-secondary" onclick="mbom.closeModals()">{% trans "Cancel" %}</button>
-      <button class="mbom-btn mbom-btn-success" onclick="mbom.saveOperation()">
+    <div class="mbom-dialog__footer">
+      <button class="mbom-btn mbom-btn--ghost"
+              onclick="window._mbomPanel && window._mbomPanel._closeDialogs()">
+        {% trans "Cancel" %}
+      </button>
+      <button class="mbom-btn mbom-btn--success" id="mbom-op-save-btn"
+              onclick="window._mbomPanel && window._mbomPanel.saveOp()">
         <i class="fas fa-save"></i> {% trans "Save" %}
       </button>
     </div>
   </div>
 </div>
 
-<!-- ===================== JavaScript ===================== -->
+<!-- ===================== Panel Bootstrap Script ===================== -->
 <script>
-(function() {
-  const PART_ID = {{ part.pk }};
-  const PLUGIN_BASE = "/plugin/inventree-mbom";
-  const ROUTING_ID = {% if routing %}{{ routing.pk }}{% else %}null{% endif %};
-  let currentOps = [];
+window.MBOM_CONFIG = {
+  partId:       {{ part.pk }},
+  routingId:    {% if routing %}{{ routing.pk }}{% else %}null{% endif %},
+  pluginBase:   '/plugin/inventree-mbom',
+  currency:     '{{ currency|default:"EUR" }}',
+  batchSize:    {{ routing.standard_batch_size|default:1 }},
 
-  const mbom = window.mbom = {
-
-    // ---- Utility: authenticated fetch ----
-    async apiFetch(url, opts = {}) {
-      const headers = {
-        "Content-Type": "application/json",
-        "X-CSRFToken": document.cookie.match(/csrftoken=([^;]+)/)?.[1] || "",
-        ...opts.headers,
-      };
-      const res = await fetch(url, { ...opts, headers });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || err.error || `HTTP ${res.status}`);
-      }
-      return res.json();
-    },
-
-    // ---- Load cost summary ----
-    async loadCostSummary() {
-      try {
-        const data = await this.apiFetch(`${PLUGIN_BASE}/cost-summary/${PART_ID}/`);
-        document.getElementById("mbom-material-cost").textContent =
-          `${parseFloat(data.material_cost).toFixed(4)} EUR`;
-        document.getElementById("mbom-labor-cost").textContent =
-          `${parseFloat(data.labor_cost).toFixed(4)} EUR`;
-        document.getElementById("mbom-machine-cost").textContent =
-          `${parseFloat(data.machine_cost).toFixed(4)} EUR`;
-        document.getElementById("mbom-total-cost").textContent =
-          `${parseFloat(data.per_unit_total_cost).toFixed(4)} EUR`;
-        const co2El = document.getElementById("mbom-co2-value");
-        if (co2El) co2El.textContent = parseFloat(data.co2_kg).toFixed(4);
-      } catch (e) {
-        console.warn("mBOM: cost summary load failed", e);
-      }
-    },
-
-    // ---- Load and render operations ----
-    async loadOperations() {
-      if (!ROUTING_ID) return;
-      try {
-        const data = await this.apiFetch(
-          `${PLUGIN_BASE}/operation/?routing=${ROUTING_ID}`
-        );
-        currentOps = Array.isArray(data) ? data : (data.results || []);
-        this.renderOperations(currentOps);
-        this.populateParentSelect(currentOps);
-      } catch (e) {
-        document.getElementById("mbom-ops-tbody").innerHTML =
-          `<tr><td colspan="8" style="color:red;">Error loading operations: ${e.message}</td></tr>`;
-      }
-    },
-
-    renderOperations(ops) {
-      const tbody = document.getElementById("mbom-ops-tbody");
-      if (!tbody) return;
-
-      if (!ops || ops.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="mbom-empty">
-          <i class="fas fa-route"></i> No operations defined yet.
-        </td></tr>`;
-        return;
-      }
-
-      let html = "";
-      for (const op of ops) {
-        html += this._renderOpRow(op, "op-parent");
-        if (op.sub_operations && op.sub_operations.length > 0) {
-          for (const sub of op.sub_operations) {
-            html += this._renderOpRow(sub, "op-child", op.pk);
-          }
-        }
-      }
-      tbody.innerHTML = html;
-    },
-
-    _renderOpRow(op, cssClass, parentId) {
-      const cost = parseFloat(op.per_unit_cost || 0).toFixed(4);
-      const laborName = op.labor_rate_name || (op.labor_rate ? `#${op.labor_rate}` : "—");
-      const machineName = op.machine_center_name || (op.machine_center ? `#${op.machine_center}` : "—");
-      const subCount = (op.sub_operations || []).length;
-      const toggleBtn = subCount > 0
-        ? `<button class="toggle-children" onclick="mbom.toggleSubOps(${op.pk})" title="Toggle sub-steps">[${subCount}]</button>`
-        : "";
-
-      return `<tr class="${cssClass}" data-op-id="${op.pk}" data-parent-id="${parentId || ""}">
-        <td><strong>${op.sequence_number}</strong>${toggleBtn}</td>
-        <td>${op.name}</td>
-        <td>${laborName}</td>
-        <td>${machineName}</td>
-        <td>${parseFloat(op.setup_time_minutes || 0).toFixed(2)}</td>
-        <td>${parseFloat(op.run_time_per_unit_minutes || 0).toFixed(2)}</td>
-        <td><strong>${cost} EUR</strong></td>
-        <td>
-          <button class="mbom-btn mbom-btn-warning" style="padding:3px 8px;font-size:0.75rem;"
-            onclick="mbom.editOperation(${op.pk})">
-            <i class="fas fa-edit"></i>
-          </button>
-          <button class="mbom-btn mbom-btn-danger" style="padding:3px 8px;font-size:0.75rem;"
-            onclick="mbom.deleteOperation(${op.pk})">
-            <i class="fas fa-trash"></i>
-          </button>
-        </td>
-      </tr>`;
-    },
-
-    toggleSubOps(parentId) {
-      const rows = document.querySelectorAll(`[data-parent-id="${parentId}"]`);
-      rows.forEach(r => r.style.display = r.style.display === "none" ? "" : "none");
-    },
-
-    // ---- Populate parent select in op modal ----
-    populateParentSelect(ops) {
-      const sel = document.getElementById("mbom-op-parent");
-      if (!sel) return;
-      // keep first "None" option, rebuild rest
-      while (sel.options.length > 1) sel.remove(1);
-      for (const op of ops) {
-        const opt = document.createElement("option");
-        opt.value = op.pk;
-        opt.textContent = `[${op.sequence_number}] ${op.name}`;
-        sel.appendChild(opt);
-      }
-    },
-
-    // ---- Modals ----
-    showApplyTemplateModal() {
-      document.getElementById("mbom-template-modal").classList.add("active");
-    },
-
-    showAddOperationModal() {
-      document.getElementById("mbom-op-modal-title").innerHTML =
-        '<i class="fas fa-plus"></i> Add Operation';
-      document.getElementById("mbom-op-id").value = "";
-      document.getElementById("mbom-op-seq").value = "";
-      document.getElementById("mbom-op-name").value = "";
-      document.getElementById("mbom-op-parent").value = "";
-      document.getElementById("mbom-op-labor").value = "";
-      document.getElementById("mbom-op-machine").value = "";
-      document.getElementById("mbom-op-setup").value = "0";
-      document.getElementById("mbom-op-cycle").value = "0";
-      document.getElementById("mbom-op-desc").value = "";
-      document.getElementById("mbom-op-modal").classList.add("active");
-    },
-
-    closeModals() {
-      document.querySelectorAll(".mbom-modal-overlay").forEach(m => m.classList.remove("active"));
-    },
-
-    // ---- Apply template ----
-    async applyTemplate() {
-      const templateId = document.getElementById("mbom-template-select").value;
-      if (!templateId) { alert("Please select a template."); return; }
-
-      const payload = {
-        part_id: PART_ID,
-        template_id: parseInt(templateId),
-        overwrite: document.getElementById("mbom-template-overwrite").value === "true",
-        batch_size: parseInt(document.getElementById("mbom-template-batch").value) || 1,
-      };
-
-      try {
-        await this.apiFetch(`${PLUGIN_BASE}/apply-template/`, {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        this.closeModals();
-        location.reload(); // reload to get routing ID if newly created
-      } catch (e) {
-        alert(`Failed to apply template: ${e.message}`);
-      }
-    },
-
-    // ---- Save operation (create or update) ----
-    async saveOperation() {
-      const opId = document.getElementById("mbom-op-id").value;
-      const payload = {
-        routing: ROUTING_ID,
-        sequence_number: document.getElementById("mbom-op-seq").value.trim(),
-        name: document.getElementById("mbom-op-name").value.trim(),
-        parent_operation: document.getElementById("mbom-op-parent").value || null,
-        labor_rate: document.getElementById("mbom-op-labor").value || null,
-        machine_center: document.getElementById("mbom-op-machine").value || null,
-        setup_time_minutes: document.getElementById("mbom-op-setup").value || "0",
-        run_time_per_unit_minutes: document.getElementById("mbom-op-cycle").value || "0",
-        description: document.getElementById("mbom-op-desc").value,
-      };
-
-      if (!payload.sequence_number || !payload.name) {
-        alert("Sequence number and operation name are required.");
-        return;
-      }
-
-      // If no routing exists yet, create one first
-      if (!ROUTING_ID) {
-        try {
-          const routing = await this.apiFetch(`${PLUGIN_BASE}/routing/`, {
-            method: "POST",
-            body: JSON.stringify({ part: PART_ID, standard_batch_size: 1 }),
-          });
-          payload.routing = routing.pk;
-          // Refresh page to get routing ID in context
-          this.closeModals();
-          location.reload();
-          return;
-        } catch (e) {
-          alert(`Failed to create routing: ${e.message}`);
-          return;
-        }
-      }
-
-      try {
-        const url = opId
-          ? `${PLUGIN_BASE}/operation/${opId}/`
-          : `${PLUGIN_BASE}/operation/`;
-        await this.apiFetch(url, {
-          method: opId ? "PATCH" : "POST",
-          body: JSON.stringify(payload),
-        });
-        this.closeModals();
-        await this.loadOperations();
-        await this.loadCostSummary();
-      } catch (e) {
-        alert(`Failed to save operation: ${e.message}`);
-      }
-    },
-
-    // ---- Edit operation ----
-    async editOperation(opId) {
-      try {
-        const op = await this.apiFetch(`${PLUGIN_BASE}/operation/${opId}/`);
-        document.getElementById("mbom-op-modal-title").innerHTML =
-          '<i class="fas fa-edit"></i> Edit Operation';
-        document.getElementById("mbom-op-id").value = op.pk;
-        document.getElementById("mbom-op-seq").value = op.sequence_number;
-        document.getElementById("mbom-op-name").value = op.name;
-        document.getElementById("mbom-op-parent").value = op.parent_operation || "";
-        document.getElementById("mbom-op-labor").value = op.labor_rate || "";
-        document.getElementById("mbom-op-machine").value = op.machine_center || "";
-        document.getElementById("mbom-op-setup").value = op.setup_time_minutes;
-        document.getElementById("mbom-op-cycle").value = op.run_time_per_unit_minutes;
-        document.getElementById("mbom-op-desc").value = op.description || "";
-        document.getElementById("mbom-op-modal").classList.add("active");
-      } catch (e) {
-        alert(`Failed to load operation: ${e.message}`);
-      }
-    },
-
-    // ---- Delete operation ----
-    async deleteOperation(opId) {
-      if (!confirm("Delete this operation? Sub-operations will also be removed.")) return;
-      try {
-        await fetch(`${PLUGIN_BASE}/operation/${opId}/`, {
-          method: "DELETE",
-          headers: {
-            "X-CSRFToken": document.cookie.match(/csrftoken=([^;]+)/)?.[1] || "",
-          },
-        });
-        await this.loadOperations();
-        await this.loadCostSummary();
-      } catch (e) {
-        alert(`Failed to delete operation: ${e.message}`);
-      }
-    },
-
-    // ---- Close modal on overlay click ----
-    initModalDismiss() {
-      document.querySelectorAll(".mbom-modal-overlay").forEach(overlay => {
-        overlay.addEventListener("click", e => {
-          if (e.target === overlay) this.closeModals();
-        });
-      });
-    },
-
-    // ---- Bootstrap ----
-    async init() {
-      this.initModalDismiss();
-      await Promise.all([
-        this.loadCostSummary(),
-        this.loadOperations(),
-      ]);
-    }
-  };
-
-  // Auto-init when DOM ready
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => mbom.init());
-  } else {
-    mbom.init();
-  }
-})();
+  /* Serialised lookups so JS can resolve names without extra API calls */
+  laborRates: [
+    {% for lr in labor_rates %}
+    { pk: {{ lr.pk }}, name: "{{ lr.name|escapejs }}", hourly_rate: "{{ lr.hourly_rate }}", currency: "{{ lr.currency }}" }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ],
+  machineCenters: [
+    {% for mc in machine_centers %}
+    { pk: {{ mc.pk }}, name: "{{ mc.name|escapejs }}", hourly_rate: "{{ mc.hourly_rate }}", currency: "{{ mc.currency }}" }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ],
+  templates: [
+    {% for t in templates %}
+    { pk: {{ t.pk }}, name: "{{ t.name|escapejs }}" }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ],
+};
 </script>
+<script src="{% static 'inventree_mbom/js/mbom_panel.js' %}"></script>
+
 </body>
 </html>
