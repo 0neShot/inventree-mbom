@@ -45,7 +45,14 @@ class MbomPanel {
       'X-CSRFToken': this._csrf(),
       ...(opts.headers || {}),
     };
-    const res = await fetch(url, { ...opts, headers, credentials: 'same-origin' });
+    const token = localStorage.getItem('inventree-token') ||
+                  sessionStorage.getItem('inventree-token') ||
+                  localStorage.getItem('token') ||
+                  sessionStorage.getItem('token');
+    if (token && !headers['Authorization']) {
+      headers['Authorization'] = `Token ${token}`;
+    }
+    const res = await fetch(url, { ...opts, headers, credentials: 'include' });
 
     if (res.status === 204) return null;  // No content (DELETE)
 
@@ -127,13 +134,28 @@ class MbomPanel {
   // =========================================================
   async loadOperations() {
     if (!this.routingId) {
+      try {
+        const rList = await this.api(`/routing/?part=${this.partId}`);
+        const routings = Array.isArray(rList) ? rList : (rList.results || []);
+        if (routings.length > 0) {
+          this.routingId = routings[0].pk;
+          this.batchSize = routings[0].standard_batch_size || this.batchSize;
+          const batchEl = document.getElementById('mbom-batch-input');
+          if (batchEl) batchEl.value = this.batchSize;
+        }
+      } catch (e) {
+        console.warn('[mBOM] routing lookup error:', e);
+      }
+    }
+
+    if (!this.routingId) {
       this._renderEmpty();
       return;
     }
 
     const tbody = document.getElementById('mbom-tbody');
     if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:20px;">
-      <span class="mbom-spinner"></span>&nbsp;Loading operationsâ€¦
+      <span class="mbom-spinner"></span>&nbsp;Loading operations…
     </td></tr>`;
 
     try {
@@ -228,14 +250,14 @@ class MbomPanel {
            <i class="fas fa-user-hard-hat"></i>
            ${this._rateName(op.labor_rate, 'labor')}
          </span>`
-      : '<span style="opacity:0.3">â€”</span>';
+      : '<span style="opacity:0.3">—</span>';
 
     const machineChip = op.machine_center
       ? `<span class="mbom-chip mbom-chip--machine" title="Machine">
            <i class="fas fa-cog"></i>
            ${this._rateName(op.machine_center, 'machine')}
          </span>`
-      : '<span style="opacity:0.3">â€”</span>';
+      : '<span style="opacity:0.3">—</span>';
 
     const cost = parseFloat(op.per_unit_cost || 0).toFixed(4);
 
@@ -404,10 +426,10 @@ class MbomPanel {
 
     const btn = document.getElementById('mbom-tmpl-apply-btn');
     btn.disabled = true;
-    btn.innerHTML = '<span class="mbom-spinner"></span> Applyingâ€¦';
+    btn.innerHTML = '<span class="mbom-spinner"></span> Applying…';
 
     try {
-      await this.api('/apply-template/', {
+      const res = await this.api('/apply-template/', {
         method: 'POST',
         body: JSON.stringify({
           part_id:     this.partId,
@@ -416,10 +438,13 @@ class MbomPanel {
           batch_size:  parseInt(document.getElementById('mbom-tmpl-batch').value) || 1,
         }),
       });
+      if (res && res.pk) {
+        this.routingId = res.pk;
+      }
       this._closeDialogs();
       this.toast('Template applied successfully!');
-      // Reload page to pick up new routing ID if it was just created
-      setTimeout(() => location.reload(), 800);
+      await this.loadOperations();
+      await this.loadCostSummary();
     } catch (e) {
       this.toast(e.message, 'error');
     } finally {
@@ -498,17 +523,16 @@ class MbomPanel {
       return;
     }
 
-    // If no routing yet, we need to create one first and reload
+    // If no routing yet, we need to create one first
     if (!this.routingId) {
       try {
-        await this.api('/routing/', {
+        const newRouting = await this.api('/routing/', {
           method: 'POST',
           body: JSON.stringify({ part: this.partId, standard_batch_size: this.batchSize }),
         });
-        this.toast('Routing created â€” reloadingâ€¦', 'info');
-        this._closeDialogs();
-        setTimeout(() => location.reload(), 600);
-        return;
+        if (newRouting && newRouting.pk) {
+          this.routingId = newRouting.pk;
+        }
       } catch (e) {
         this.toast(`Failed to create routing: ${e.message}`, 'error');
         return;
@@ -529,7 +553,7 @@ class MbomPanel {
 
     const btn = document.getElementById('mbom-op-save-btn');
     btn.disabled = true;
-    btn.innerHTML = '<span class="mbom-spinner"></span> Savingâ€¦';
+    btn.innerHTML = '<span class="mbom-spinner"></span> Saving…';
 
     try {
       if (opId) {
@@ -627,7 +651,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // =========================================================
 // PUI React Integration Exports
 // =========================================================
-export function renderMbomPanel(target, context) {
+export async function renderMbomPanel(target, context) {
   if (!target) return;
   const partId = context?.target_id || context?.id;
   target.setAttribute('data-mbom-panel', 'true');
@@ -640,56 +664,95 @@ export function renderMbomPanel(target, context) {
     document.head.appendChild(link);
   }
 
-  target.innerHTML = '<div style=\"padding:16px;font-family:system-ui,-apple-system,sans-serif;\">' +
-    '<div style=\"display:flex;align-items:center;gap:10px;margin-bottom:12px;\">' +
-      '<span style=\"font-size:1.5rem;\">⚙️</span>' +
+  target.innerHTML = '<div style="padding:16px;font-family:system-ui,-apple-system,sans-serif;">' +
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">' +
+      '<span style="font-size:1.5rem;">⚙️</span>' +
       '<div>' +
-        '<strong style=\"font-size:1.1rem;\">Manufacturing Routing (mBOM)</strong>' +
-        '<div style=\"font-size:0.8rem;color:#6b7280;\">Hierarchical Process Routing &amp; Operational Costs</div>' +
+        '<strong style="font-size:1.1rem;">Manufacturing Routing (mBOM)</strong>' +
+        '<div style="font-size:0.8rem;color:#6b7280;">Hierarchical Process Routing &amp; Operational Costs</div>' +
       '</div>' +
     '</div>' +
-    '<div id=\"mbom-target-loading\" style=\"padding:20px;text-align:center;color:#6b7280;\">Loading routing...</div>' +
+    '<div id="mbom-target-loading" style="padding:20px;text-align:center;color:#6b7280;">Loading routing...</div>' +
   '</div>';
 
-  fetch('/plugin/inventree-mbom/panel/part/' + partId + '/', {
-    headers: { 'Accept': 'text/html, */*' }
-  })
-    .then(function(r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.text();
-    })
-    .then(function(html) {
-      target.innerHTML = html;
-      if (window.MBOM_CONFIG) {
-        const panel = new MbomPanel(window.MBOM_CONFIG);
-        panel.init();
-      }
-    })
-    .catch(function(err) {
-      target.innerHTML = '<div style=\"padding:16px;color:#dc2626;background:#fee2e2;border-radius:8px;\">' +
-        '<strong>Error loading mBOM panel:</strong> ' + err.message +
-      '</div>';
+  try {
+    const res = await fetch('/plugin/inventree-mbom/panel/part/' + partId + '/', {
+      headers: { 'Accept': 'text/html, */*' },
+      credentials: 'include',
     });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const html = await res.text();
+    target.innerHTML = html;
+
+    // 1. Extract config from JSON script tag
+    let config = null;
+    const configEl = target.querySelector('#mbom-config-data');
+    if (configEl && configEl.textContent) {
+      try {
+        config = JSON.parse(configEl.textContent);
+      } catch (e) {
+        console.warn('[mBOM] Failed to parse #mbom-config-data JSON:', e);
+      }
+    }
+
+    // 2. Fallback: regex extraction from script in HTML
+    if (!config) {
+      const match = html.match(/window\.MBOM_CONFIG\s*=\s*(\{[\s\S]*?\});/);
+      if (match) {
+        try {
+          config = (new Function('return ' + match[1]))();
+        } catch (e) {
+          console.warn('[mBOM] Failed to eval regex config:', e);
+        }
+      }
+    }
+
+    // 3. Fallback: global window.MBOM_CONFIG if defined
+    if (!config && window.MBOM_CONFIG) {
+      config = window.MBOM_CONFIG;
+    }
+
+    // 4. Default config if not present
+    if (!config) {
+      config = {
+        partId: parseInt(partId),
+        routingId: null,
+        pluginBase: '/plugin/inventree-mbom',
+        currency: 'EUR',
+        batchSize: 1,
+        laborRates: [],
+        machineCenters: [],
+        templates: [],
+      };
+    }
+
+    window.MBOM_CONFIG = config;
+    const panel = new MbomPanel(config);
+    window._mbomPanel = panel;
+    await panel.init();
+  } catch (err) {
+    target.innerHTML = '<div style="padding:16px;color:#dc2626;background:#fee2e2;border-radius:8px;">' +
+      '<strong>Error loading mBOM panel:</strong> ' + err.message +
+    '</div>';
+  }
 }
 
-export function renderMbomPricingPanel(target, context) {
+export async function renderMbomPricingPanel(target, context) {
   if (!target) return;
   const partId = context?.target_id || context?.id;
   target.setAttribute('data-mbom-pricing-panel', 'true');
 
-  target.innerHTML = '<div style=\"padding:12px;color:#6b7280;\">Loading pricing...</div>';
+  target.innerHTML = '<div style="padding:12px;color:#6b7280;">Loading pricing...</div>';
 
-  fetch('/plugin/inventree-mbom/pricing-panel/' + partId + '/', {
-    headers: { 'Accept': 'text/html, */*' }
-  })
-    .then(function(r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.text();
-    })
-    .then(function(html) {
-      target.innerHTML = html;
-    })
-    .catch(function(err) {
-      target.innerHTML = '<div style=\"padding:12px;color:#dc2626;\">Error: ' + err.message + '</div>';
+  try {
+    const res = await fetch('/plugin/inventree-mbom/pricing-panel/' + partId + '/', {
+      headers: { 'Accept': 'text/html, */*' },
+      credentials: 'include',
     });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const html = await res.text();
+    target.innerHTML = html;
+  } catch (err) {
+    target.innerHTML = '<div style="padding:12px;color:#dc2626;">Error: ' + err.message + '</div>';
+  }
 }

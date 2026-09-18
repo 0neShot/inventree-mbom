@@ -260,7 +260,31 @@
   </div>
 </div>
 
-<!-- ===================== Panel Bootstrap Script ===================== -->
+<!-- ===================== Panel Bootstrap Script & JSON Config ===================== -->
+<script type="application/json" id="mbom-config-data">
+{
+  "partId": {{ part.pk }},
+  "routingId": {% if routing %}{{ routing.pk }}{% else %}null{% endif %},
+  "pluginBase": "/plugin/inventree-mbom",
+  "currency": "{{ currency|default:'EUR' }}",
+  "batchSize": {{ routing.standard_batch_size|default:1 }},
+  "laborRates": [
+    {% for lr in labor_rates %}
+    {"pk": {{ lr.pk }}, "name": "{{ lr.name|escapejs }}", "hourly_rate": "{{ lr.hourly_rate }}", "currency": "{{ lr.currency }}"}{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ],
+  "machineCenters": [
+    {% for mc in machine_centers %}
+    {"pk": {{ mc.pk }}, "name": "{{ mc.name|escapejs }}", "hourly_rate": "{{ mc.hourly_rate }}", "currency": "{{ mc.currency }}"}{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ],
+  "templates": [
+    {% for t in templates %}
+    {"pk": {{ t.pk }}, "name": "{{ t.name|escapejs }}"}{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ]
+}
+</script>
 <script>
 window.MBOM_CONFIG = {
   partId:       {{ part.pk }},
