@@ -95,9 +95,9 @@ class ManufacturingBOMPlugin(
     def get_ui_panels(self, request, context=None, **kwargs):
         """Return UI panels to inject into InvenTree pages.
 
-        Registers panels on assembly part detail pages:
-        1. 'Manufacturing Routing (mBOM)' - the full routing management tab
-        2. 'Manufacturing Costs' - compact pricing breakdown card
+        Registers panels:
+        1. 'Manufacturing (mBOM) Tariffs' - settings admin panel in /web/settings/admin/
+        2. 'Manufacturing Routing (mBOM)' - full routing management tab on assembly parts
         """
         panels = []
         if not context:
@@ -105,27 +105,29 @@ class ManufacturingBOMPlugin(
 
         target_model = context.get("target_model") or context.get("model", "")
         target_id = context.get("target_id") or context.get("id", None)
+        plugin_slug = PLUGIN_SLUG
+        js_source = f"/static/plugins/{plugin_slug}/inventree_mbom/js/mbom_panel.js"
 
+        # Web Settings Admin Panel (/web/settings/admin/)
+        if target_model == "systemsettings":
+            panels.append({
+                "key": "mbom-settings-panel",
+                "title": str(_("Manufacturing (mBOM) Tariffs")),
+                "icon": "ti:tools",
+                "source": f"{js_source}:renderMbomSettingsPanel",
+            })
+
+        # Assembly Part Detail Panel (/web/part/<id>/)
         if target_model == "part" and target_id:
             try:
                 from part.models import Part
                 part = Part.objects.get(pk=int(target_id))
                 if part.assembly:
-                    plugin_slug = PLUGIN_SLUG
-                    js_source = f"/static/plugins/{plugin_slug}/inventree_mbom/js/mbom_panel.js"
-                    # Main routing management tab
                     panels.append({
                         "key": "mbom-routing-panel",
                         "title": str(_("Manufacturing Routing (mBOM)")),
                         "icon": "ti:tools",
                         "source": f"{js_source}:renderMbomPanel",
-                    })
-                    # Cost breakdown card
-                    panels.append({
-                        "key": "mbom-pricing-panel",
-                        "title": str(_("Manufacturing Costs")),
-                        "icon": "ti:calculator",
-                        "source": f"{js_source}:renderMbomPricingPanel",
                     })
             except Exception:
                 pass

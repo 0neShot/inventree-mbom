@@ -94,11 +94,43 @@
 
   <!-- ===================== Operations Table / Empty State ===================== -->
   <div id="mbom-ops-container">
-    <!-- Populated by JS -->
-    <div class="mbom-empty">
-      <i class="fas fa-route mbom-empty__icon"></i>
-      <div class="mbom-empty__title">{% trans "Loading routing…" %}</div>
+    {% if not routing or not routing.operations.exists %}
+    <div class="mbom-empty mbom-quickstart-hero">
+      <div class="mbom-quickstart-icon">⚙️</div>
+      <h4 class="mbom-quickstart-title">{% trans "Manufacturing Routing (mBOM)" %}</h4>
+      <p class="mbom-quickstart-sub">{% trans "This assembly has no routing defined yet. Select a process template to generate operations instantly, or start with a custom routing." %}</p>
+      
+      <div class="mbom-quickstart-actions">
+        <div class="mbom-quickstart-template-bar">
+          <select id="mbom-quick-template-select" class="mbom-select">
+            <option value="">— {% trans "Select Process Template…" %} —</option>
+            {% for t in templates %}
+              <option value="{{ t.pk }}" {% if forloop.first %}selected{% endif %}>{{ t.name }}</option>
+            {% endfor %}
+          </select>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <label for="mbom-quick-batch" style="font-size:0.8rem;opacity:0.75;">{% trans "Batch" %}:</label>
+            <input type="number" id="mbom-quick-batch" value="50" min="1" style="width:60px;" class="mbom-input">
+          </div>
+          <button class="mbom-btn mbom-btn--primary" onclick="window._mbomPanel && window._mbomPanel.quickApplyTemplate()">
+            <i class="fas fa-magic"></i>
+            <span>{% trans "Apply &amp; Generate Routing" %}</span>
+          </button>
+        </div>
+
+        <div class="mbom-quickstart-divider"><span>{% trans "or" %}</span></div>
+
+        <button class="mbom-btn mbom-btn--ghost" onclick="window._mbomPanel && window._mbomPanel.createEmptyRouting()">
+          <i class="fas fa-plus"></i>
+          <span>{% trans "+ Create Empty Routing" %}</span>
+        </button>
+      </div>
     </div>
+    {% else %}
+    <div style="text-align:center;padding:32px 16px;color:#6b7280;">
+      <span class="mbom-spinner"></span>&nbsp;{% trans "Loading routing…" %}
+    </div>
+    {% endif %}
   </div>
 
 </div><!-- /mbom-root -->

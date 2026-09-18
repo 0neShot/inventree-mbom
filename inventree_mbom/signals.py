@@ -119,7 +119,24 @@ def on_part_routing_saved(sender, instance, **kwargs):
     try:
         from .pricing import MbomPricingService
         MbomPricingService.schedule_for_update(instance.part_id)
-        # Best-effort extra cost write
+        MbomPricingService.sync_part_pricing(instance.part)
         MbomPricingService.write_extra_cost(instance.part)
     except Exception as exc:
         logger.debug('mBOM: post_save on PartRouting pricing update: %s', exc)
+
+
+# =========================================================
+# PartPricing post_save → roll up mBOM if part is an assembly
+# =========================================================
+
+@receiver(post_save, sender='part.PartPricing')
+def on_part_pricing_saved(sender, instance, **kwargs):
+    """When InvenTree recalculates PartPricing, re-roll mBOM costs into overall_min/max."""
+    try:
+        part = instance.part
+        if getattr(part, 'assembly', False):
+            from .pricing import MbomPricingService
+            MbomPricingService.sync_part_pricing(part)
+    except Exception as exc:
+        logger.debug('mBOM: on_part_pricing_saved error: %s', exc)
+

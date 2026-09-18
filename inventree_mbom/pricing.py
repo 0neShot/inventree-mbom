@@ -88,8 +88,10 @@ def get_mbom_unit_cost(part, batch_size: int = 1, _visited: set = None) -> dict:
         from .models import PartRouting
 
         try:
-            routing = part.mbom_routing
-        except PartRouting.DoesNotExist:
+            routing = PartRouting.objects.filter(part_id=part.pk).first()
+        except Exception:
+            routing = None
+        if not routing:
             return empty
 
         labor_cost   = routing.total_labor_cost(batch_size)
@@ -220,6 +222,79 @@ class MbomPricingService:
             return False
 
     @staticmethod
+    def sync_part_pricing(part, batch_size: int = None) -> bool:
+        """Sync mBOM manufacturing cost directly into InvenTree PartPricing overall costs.
+
+        Calculates Total Assembly Cost = Material (eBOM) + Manufacturing (mBOM).
+        Sets PartPricing.overall_min and overall_max accordingly, then schedules
+        background updates for parent assemblies.
+        """
+        try:
+            from part.models import PartPricing
+            from djmoney.money import Money
+            from .models import PartRouting
+
+            if isinstance(part, (int, str)):
+                from part.models import Part
+                part = Part.objects.get(pk=int(part))
+
+            try:
+                routing = PartRouting.objects.filter(part_id=part.pk).first()
+            except Exception:
+                routing = None
+
+            pricing, _ = PartPricing.objects.get_or_create(part_id=part.pk)
+
+            if not routing or not routing.operations.filter(is_active=True).exists():
+                return False
+
+            if batch_size is None:
+                batch_size = routing.standard_batch_size or 1
+
+            cost_data = get_assembly_full_cost(part, batch_size)
+            if not cost_data['has_routing']:
+                return False
+
+            currency = getattr(pricing, 'currency', 'EUR') or 'EUR'
+            bom_min = _to_decimal(pricing.bom_cost_min)
+            bom_max = _to_decimal(pricing.bom_cost_max)
+            mfg_unit = cost_data['per_unit_mfg']
+
+            # Total = BOM Material + mBOM Manufacturing
+            total_min = bom_min + mfg_unit
+            total_max = (bom_max if bom_max > Decimal('0.00') else bom_min) + mfg_unit
+
+            PartPricing.objects.filter(part_id=part.pk).update(
+                overall_min=total_min,
+                overall_max=total_max,
+                overall_min_currency=currency,
+                overall_max_currency=currency,
+            )
+            logger.info(
+                'mBOM: Synced PartPricing for %s (pk=%s): overall=%.4f..%.4f %s (mfg=%.4f)',
+                part.name, part.pk, total_min, total_max, currency, mfg_unit
+            )
+
+            # Cascade to parent assemblies
+            try:
+                from part.models import BomItem
+                parent_ids = list(
+                    BomItem.objects
+                    .filter(sub_part_id=part.pk)
+                    .values_list('part_id', flat=True)
+                    .distinct()
+                )
+                for pid in parent_ids:
+                    MbomPricingService.schedule_for_update(pid)
+            except Exception as exc:
+                logger.debug('mBOM: Could not cascade to parents of part %s: %s', part.pk, exc)
+
+            return True
+        except Exception as exc:
+            logger.warning('mBOM: Failed to sync PartPricing for part %s: %s', getattr(part, 'pk', part), exc)
+            return False
+
+    @staticmethod
     def schedule_for_affected_parts(rate_instance, rate_field: str) -> int:
         """Schedule pricing recalculation for all parts using a given rate.
 
@@ -251,6 +326,12 @@ class MbomPricingService:
         for part_id in part_ids:
             if MbomPricingService.schedule_for_update(part_id):
                 count += 1
+            try:
+                from part.models import Part
+                p = Part.objects.get(pk=part_id)
+                MbomPricingService.sync_part_pricing(p)
+            except Exception:
+                pass
 
             # Also cascade to parent assemblies that use this part in their BoM
             try:

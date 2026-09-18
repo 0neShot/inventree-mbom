@@ -61,6 +61,11 @@ class LaborRateDetail(MBomPermissionMixin, RetrieveUpdateDestroyAPI):
     serializer_class = LaborRateSerializer
     queryset = LaborRate.objects.all()
 
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        from .pricing import MbomPricingService
+        MbomPricingService.schedule_for_affected_parts(instance, 'labor_rate')
+
 
 # ---------------------------------------------------------------------------
 # MachineCenter endpoints
@@ -79,6 +84,11 @@ class MachineCenterDetail(MBomPermissionMixin, RetrieveUpdateDestroyAPI):
     """Retrieve, update, and delete a MachineCenter."""
     serializer_class = MachineCenterSerializer
     queryset = MachineCenter.objects.all()
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        from .pricing import MbomPricingService
+        MbomPricingService.schedule_for_affected_parts(instance, 'machine_center')
 
 
 # ---------------------------------------------------------------------------
@@ -138,11 +148,21 @@ class PartRoutingList(MBomPermissionMixin, ListCreateAPI):
             qs = qs.filter(part_id=part_id)
         return qs
 
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        from .pricing import MbomPricingService
+        MbomPricingService.sync_part_pricing(instance.part, instance.standard_batch_size)
+
 
 class PartRoutingDetail(MBomPermissionMixin, RetrieveUpdateDestroyAPI):
     """Retrieve, update, and delete a PartRouting."""
     serializer_class = PartRoutingSerializer
     queryset = PartRouting.objects.all()
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        from .pricing import MbomPricingService
+        MbomPricingService.sync_part_pricing(instance.part, instance.standard_batch_size)
 
 
 # ---------------------------------------------------------------------------
@@ -165,11 +185,27 @@ class RoutingOperationList(MBomPermissionMixin, ListCreateAPI):
             qs = qs.filter(routing_id=routing_id, parent_operation__isnull=True)
         return qs
 
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        from .pricing import MbomPricingService
+        MbomPricingService.sync_part_pricing(instance.routing.part)
+
 
 class RoutingOperationDetail(MBomPermissionMixin, RetrieveUpdateDestroyAPI):
     """Retrieve, update, and delete a RoutingOperation."""
     serializer_class = RoutingOperationSerializer
     queryset = RoutingOperation.objects.all()
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        from .pricing import MbomPricingService
+        MbomPricingService.sync_part_pricing(instance.routing.part)
+
+    def perform_destroy(self, instance):
+        part = instance.routing.part
+        instance.delete()
+        from .pricing import MbomPricingService
+        MbomPricingService.sync_part_pricing(part)
 
 
 # ---------------------------------------------------------------------------
@@ -264,6 +300,9 @@ class ApplyTemplateView(APIView):
 
         copy_steps(template.steps.filter(parent_step__isnull=True))
 
+        from .pricing import MbomPricingService
+        MbomPricingService.sync_part_pricing(part, batch_size)
+
         return Response(
             PartRoutingSerializer(routing).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -275,17 +314,9 @@ class ApplyTemplateView(APIView):
 # ---------------------------------------------------------------------------
 
 class PartCostSummaryView(APIView):
-    """Return a full cost breakdown for an assembly part.
+    """Return a full cost breakdown for an assembly part including setup/run split.
 
     GET /plugin/inventree-mbom/cost-summary/<part_pk>/
-
-    Returns:
-        material_cost  - native eBOM cost from InvenTree pricing
-        labor_cost     - mBOM labor cost
-        machine_cost   - mBOM machine cost
-        total_cost     - sum of all three
-        per_unit_cost  - total / batch_size
-        co2_kg         - total CO2 for the routing
     """
     permission_classes = [permissions.IsAuthenticated]
 
@@ -295,37 +326,100 @@ class PartCostSummaryView(APIView):
         except inventree_part.Part.DoesNotExist:
             return Response({"error": "Part not found"}, status=404)
 
-        # Use the unified pricing engine for a complete breakdown
         from .pricing import get_assembly_full_cost
 
         try:
-            routing = part.mbom_routing
-            batch_size = routing.standard_batch_size
-        except PartRouting.DoesNotExist:
+            routing = getattr(part, 'mbom_routing', None)
+            batch_size = (routing.standard_batch_size or 1) if routing else 1
+        except Exception:
+            routing = None
             batch_size = 1
 
         cost = get_assembly_full_cost(part, batch_size)
 
+        labor_setup = Decimal("0.00")
+        labor_run = Decimal("0.00")
+        machine_setup = Decimal("0.00")
+        machine_run = Decimal("0.00")
+        operations_data = []
+
+        if routing:
+            for op in routing.operations.filter(parent_operation__isnull=True, is_active=True).order_by("sequence_number"):
+                op_l_setup = op.labor_setup_cost()
+                op_l_run = op.labor_run_cost_per_unit() * batch_size
+                op_m_setup = op.machine_setup_cost()
+                op_m_run = op.machine_run_cost_per_unit() * batch_size
+                labor_setup += op_l_setup
+                labor_run += op_l_run
+                machine_setup += op_m_setup
+                machine_run += op_m_run
+
+                sub_ops_data = []
+                for sub in op.sub_operations.filter(is_active=True).order_by("sequence_number"):
+                    sub_l_setup = sub.labor_setup_cost()
+                    sub_l_run = sub.labor_run_cost_per_unit() * batch_size
+                    sub_m_setup = sub.machine_setup_cost()
+                    sub_m_run = sub.machine_run_cost_per_unit() * batch_size
+                    labor_setup += sub_l_setup
+                    labor_run += sub_l_run
+                    machine_setup += sub_m_setup
+                    machine_run += sub_m_run
+
+                    sub_ops_data.append({
+                        "pk": sub.pk,
+                        "sequence_number": sub.sequence_number,
+                        "name": sub.name,
+                        "labor_rate_name": sub.labor_rate.name if sub.labor_rate else "—",
+                        "machine_name": sub.machine_center.name if sub.machine_center else "—",
+                        "setup_min": float(sub.setup_time_minutes),
+                        "cycle_min": float(sub.run_time_per_unit_minutes),
+                        "per_unit_cost": str(sub.per_unit_cost(batch_size)),
+                    })
+
+                operations_data.append({
+                    "pk": op.pk,
+                    "sequence_number": op.sequence_number,
+                    "name": op.name,
+                    "labor_rate_name": op.labor_rate.name if op.labor_rate else "—",
+                    "machine_name": op.machine_center.name if op.machine_center else "—",
+                    "setup_min": float(op.setup_time_minutes),
+                    "cycle_min": float(op.run_time_per_unit_minutes),
+                    "per_unit_cost": str(op.per_unit_cost(batch_size)),
+                    "sub_operations": sub_ops_data,
+                })
+
+        if cost["has_routing"]:
+            from .pricing import MbomPricingService
+            MbomPricingService.sync_part_pricing(part, batch_size=batch_size)
+
         return Response({
             "part_id": pk,
-            "part_name": cost['part_name'],
-            "batch_size": cost['batch_size'],
+            "part_name": cost["part_name"],
+            "batch_size": cost["batch_size"],
             # Batch totals
-            "material_cost": str(cost['material_cost_min']),
-            "material_cost_max": str(cost['material_cost_max']),
-            "labor_cost": str(cost['labor_cost']),
-            "machine_cost": str(cost['machine_cost']),
-            "manufacturing_cost": str(cost['mfg_cost']),
-            "co2_kg": str(cost['co2_kg']),
+            "material_cost": str(cost["material_cost_min"]),
+            "material_cost_max": str(cost["material_cost_max"]),
+            "labor_cost": str(cost["labor_cost"]),
+            "machine_cost": str(cost["machine_cost"]),
+            "manufacturing_cost": str(cost["mfg_cost"]),
+            "co2_kg": str(cost["co2_kg"]),
+            # Setup vs Run split
+            "labor_setup_cost": str(labor_setup.quantize(Decimal("0.0001"))),
+            "labor_run_cost": str(labor_run.quantize(Decimal("0.0001"))),
+            "machine_setup_cost": str(machine_setup.quantize(Decimal("0.0001"))),
+            "machine_run_cost": str(machine_run.quantize(Decimal("0.0001"))),
+            "setup_total": str((labor_setup + machine_setup).quantize(Decimal("0.0001"))),
+            "run_total": str((labor_run + machine_run).quantize(Decimal("0.0001"))),
             # Per-unit
-            "per_unit_material": str(cost['per_unit_material_min']),
-            "per_unit_labor": str(cost['per_unit_labor']),
-            "per_unit_machine": str(cost['per_unit_machine']),
-            "per_unit_manufacturing_cost": str(cost['per_unit_mfg']),
-            "per_unit_total_cost": str(cost['per_unit_total_min']),
-            "per_unit_total_cost_max": str(cost['per_unit_total_max']),
-            # Metadata
-            "has_routing": cost['has_routing'],
+            "per_unit_material": str(cost["per_unit_material_min"]),
+            "per_unit_labor": str(cost["per_unit_labor"]),
+            "per_unit_machine": str(cost["per_unit_machine"]),
+            "per_unit_manufacturing_cost": str(cost["per_unit_mfg"]),
+            "per_unit_total_cost": str(cost["per_unit_total_min"]),
+            "per_unit_total_cost_max": str(cost["per_unit_total_max"]),
+            # Metadata & operations
+            "has_routing": cost["has_routing"],
+            "operations": operations_data,
         })
 
 
@@ -347,8 +441,8 @@ class MBomPanelView(APIView):
             return Response({"error": "Part not found"}, status=404)
 
         try:
-            routing = part.mbom_routing
-        except PartRouting.DoesNotExist:
+            routing = getattr(part, 'mbom_routing', None)
+        except Exception:
             routing = None
 
         templates = ProcessTemplate.objects.filter(is_active=True).order_by("name")
@@ -451,11 +545,15 @@ def construct_urls():
         # MachineCenter
         path("machine-center/", MachineCenterList.as_view(), name="mbom-machine-center-list"),
         path("machine-center/<int:pk>/", MachineCenterDetail.as_view(), name="mbom-machine-center-detail"),
-        # ProcessTemplate
+        # ProcessTemplate (supports both process-template and template aliases)
         path("process-template/", ProcessTemplateList.as_view(), name="mbom-process-template-list"),
         path("process-template/<int:pk>/", ProcessTemplateDetail.as_view(), name="mbom-process-template-detail"),
         path("process-template-step/", ProcessTemplateStepList.as_view(), name="mbom-template-step-list"),
         path("process-template-step/<int:pk>/", ProcessTemplateStepDetail.as_view(), name="mbom-template-step-detail"),
+        path("template/", ProcessTemplateList.as_view(), name="mbom-template-alias-list"),
+        path("template/<int:pk>/", ProcessTemplateDetail.as_view(), name="mbom-template-alias-detail"),
+        path("template-step/", ProcessTemplateStepList.as_view(), name="mbom-template-step-alias-list"),
+        path("template-step/<int:pk>/", ProcessTemplateStepDetail.as_view(), name="mbom-template-step-alias-detail"),
         # PartRouting
         path("routing/", PartRoutingList.as_view(), name="mbom-routing-list"),
         path("routing/<int:pk>/", PartRoutingDetail.as_view(), name="mbom-routing-detail"),
@@ -467,7 +565,7 @@ def construct_urls():
         path("cost-summary/<int:pk>/", PartCostSummaryView.as_view(), name="mbom-cost-summary"),
         # Panel HTML
         path("panel/part/<int:pk>/", MBomPanelView.as_view(), name="mbom-panel"),
-        # Pricing overview panel
+        # Pricing overview panel (retained for backward-compat API calls)
         path("pricing-panel/<int:pk>/", MBomPricingPanelView.as_view(), name="mbom-pricing-panel"),
     ]
 
