@@ -652,7 +652,7 @@ export function renderMbomPanel(target, context) {
   '</div>';
 
   fetch('/plugin/inventree-mbom/panel/part/' + partId + '/', {
-    headers: { 'Accept': 'text/html' }
+    headers: { 'Accept': 'text/html, */*' }
   })
     .then(function(r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -680,7 +680,7 @@ export function renderMbomPricingPanel(target, context) {
   target.innerHTML = '<div style=\"padding:12px;color:#6b7280;\">Loading pricing...</div>';
 
   fetch('/plugin/inventree-mbom/pricing-panel/' + partId + '/', {
-    headers: { 'Accept': 'text/html' }
+    headers: { 'Accept': 'text/html, */*' }
   })
     .then(function(r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);

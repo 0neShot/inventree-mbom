@@ -5,6 +5,7 @@ from decimal import Decimal
 from django.db import transaction
 from django.urls import path
 from rest_framework import filters, permissions, status
+from rest_framework.renderers import StaticHTMLRenderer, TemplateHTMLRenderer, JSONRenderer
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -335,6 +336,7 @@ class PartCostSummaryView(APIView):
 class MBomPanelView(APIView):
     """Returns the HTML content for the mBOM panel on a part detail page."""
     permission_classes = [permissions.IsAuthenticated]
+    renderer_classes = [StaticHTMLRenderer, TemplateHTMLRenderer, JSONRenderer]
 
     def get(self, request, pk):
         from django.template.loader import render_to_string
@@ -385,6 +387,7 @@ class MBomPricingPanelView(APIView):
      - Per-unit totals and grand total
     """
     permission_classes = [permissions.IsAuthenticated]
+    renderer_classes = [StaticHTMLRenderer, TemplateHTMLRenderer, JSONRenderer]
 
     def get(self, request, pk):
         from django.template.loader import render_to_string
