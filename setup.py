@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Setup file for the inventree-mbom plugin.
 
 Generated for InvenTree >= 1.3.1

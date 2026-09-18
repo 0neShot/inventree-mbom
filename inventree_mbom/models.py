@@ -1,4 +1,4 @@
-﻿"""Django models for the inventree-mbom plugin.
+"""Django models for the inventree-mbom plugin.
 
 Data model hierarchy:
   Central Tariff Catalog:

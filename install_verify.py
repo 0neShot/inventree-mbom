@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python
+#!/usr/bin/env python
 """inventree-mbom: Installation verification script.
 
 Run this OUTSIDE InvenTree's venv to check prerequisites,

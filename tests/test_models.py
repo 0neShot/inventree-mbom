@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tests for inventree-mbom: models, cost calculations, and pricing engine.
 
 Run via InvenTree's test runner:

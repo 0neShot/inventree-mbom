@@ -1,4 +1,4 @@
-﻿"""Initial database migration for the inventree-mbom plugin.
+"""Initial database migration for the inventree-mbom plugin.
 
 Creates:
   - LaborRate

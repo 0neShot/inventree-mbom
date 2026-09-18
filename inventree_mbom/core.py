@@ -1,4 +1,4 @@
-﻿"""Core plugin definition for inventree-mbom.
+"""Core plugin definition for inventree-mbom.
 
 Provides a Manufacturing BOM & Routings tab on assembly parts,
 with hierarchical process steps, central labor/machine rates,
@@ -100,28 +100,32 @@ class ManufacturingBOMPlugin(
         2. 'Manufacturing Costs' - compact pricing breakdown card
         """
         panels = []
-        target_model = context.get("model", "") if context else ""
-        target_id = context.get("id", None) if context else None
+        if not context:
+            return panels
+
+        target_model = context.get("target_model") or context.get("model", "")
+        target_id = context.get("target_id") or context.get("id", None)
 
         if target_model == "part" and target_id:
             try:
                 from part.models import Part
-                part = Part.objects.get(pk=target_id)
+                part = Part.objects.get(pk=int(target_id))
                 if part.assembly:
                     plugin_slug = PLUGIN_SLUG
+                    js_source = f"/static/plugins/{plugin_slug}/inventree_mbom/js/mbom_panel.js"
                     # Main routing management tab
                     panels.append({
-                        "name": "mbom_routing",
-                        "label": _("Manufacturing Routing (mBOM)"),
-                        "icon": "fas fa-cogs",
-                        "content_url": f"/plugin/{plugin_slug}/panel/part/{target_id}/",
+                        "key": "mbom-routing-panel",
+                        "title": str(_("Manufacturing Routing (mBOM)")),
+                        "icon": "ti:tools",
+                        "source": f"{js_source}:renderMbomPanel",
                     })
                     # Cost breakdown card
                     panels.append({
-                        "name": "mbom_pricing",
-                        "label": _("Manufacturing Costs"),
-                        "icon": "fas fa-calculator",
-                        "content_url": f"/plugin/{plugin_slug}/pricing-panel/{target_id}/",
+                        "key": "mbom-pricing-panel",
+                        "title": str(_("Manufacturing Costs")),
+                        "icon": "ti:calculator",
+                        "source": f"{js_source}:renderMbomPricingPanel",
                     })
             except Exception:
                 pass

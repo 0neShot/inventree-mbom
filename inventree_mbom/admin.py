@@ -1,4 +1,4 @@
-﻿"""Django admin registration for inventree-mbom models."""
+"""Django admin registration for inventree-mbom models."""
 
 from django.contrib import admin
 
@@ -12,14 +12,20 @@ from .models import (
 )
 
 
-@admin.register(LaborRate)
+def _safe_register(model, admin_class):
+    try:
+        admin.site.unregister(model)
+    except Exception:
+        pass
+    admin.site.register(model, admin_class)
+
+
 class LaborRateAdmin(admin.ModelAdmin):
     list_display = ["name", "hourly_rate", "currency", "is_active"]
     search_fields = ["name", "description"]
     list_filter = ["is_active", "currency"]
 
 
-@admin.register(MachineCenter)
 class MachineCenterAdmin(admin.ModelAdmin):
     list_display = ["name", "hourly_rate", "currency", "co2_factor_per_minute", "is_active"]
     search_fields = ["name", "description"]
@@ -40,7 +46,6 @@ class ProcessTemplateStepInline(admin.TabularInline):
     ]
 
 
-@admin.register(ProcessTemplate)
 class ProcessTemplateAdmin(admin.ModelAdmin):
     list_display = ["name", "is_active", "created", "updated"]
     search_fields = ["name", "description"]
@@ -63,14 +68,12 @@ class RoutingOperationInline(admin.TabularInline):
     ]
 
 
-@admin.register(PartRouting)
 class PartRoutingAdmin(admin.ModelAdmin):
     list_display = ["part", "source_template", "standard_batch_size", "created"]
     search_fields = ["part__name", "part__IPN"]
     inlines = [RoutingOperationInline]
 
 
-@admin.register(RoutingOperation)
 class RoutingOperationAdmin(admin.ModelAdmin):
     list_display = [
         "sequence_number",
@@ -84,3 +87,10 @@ class RoutingOperationAdmin(admin.ModelAdmin):
     ]
     search_fields = ["name", "routing__part__name"]
     list_filter = ["is_active", "labor_rate", "machine_center"]
+
+
+_safe_register(LaborRate, LaborRateAdmin)
+_safe_register(MachineCenter, MachineCenterAdmin)
+_safe_register(ProcessTemplate, ProcessTemplateAdmin)
+_safe_register(PartRouting, PartRoutingAdmin)
+_safe_register(RoutingOperation, RoutingOperationAdmin)

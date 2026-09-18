@@ -1,4 +1,4 @@
-﻿"""REST API views for the inventree-mbom plugin."""
+"""REST API views for the inventree-mbom plugin."""
 
 from decimal import Decimal
 

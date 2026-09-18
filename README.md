@@ -1,4 +1,4 @@
-﻿# inventree-mbom
+# inventree-mbom
 
 **Manufacturing BOM & Routings plugin for [InvenTree](https://inventree.org)**
 

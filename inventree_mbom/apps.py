@@ -1,4 +1,4 @@
-﻿"""Django app configuration for the inventree_mbom plugin."""
+"""Django app configuration for the inventree_mbom plugin."""
 
 from django.apps import AppConfig
 

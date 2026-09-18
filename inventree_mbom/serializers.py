@@ -1,4 +1,4 @@
-﻿"""DRF serializers for the inventree-mbom plugin."""
+"""DRF serializers for the inventree-mbom plugin."""
 
 from rest_framework import serializers
 

@@ -1,4 +1,4 @@
-﻿"""Django signal handlers for the inventree-mbom plugin.
+"""Django signal handlers for the inventree-mbom plugin.
 
 Pricing Bridge:
     When a LaborRate or MachineCenter rate is changed, we need all affected

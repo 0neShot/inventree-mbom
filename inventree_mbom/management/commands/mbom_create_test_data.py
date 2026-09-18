@@ -1,4 +1,4 @@
-﻿"""Management command: create a test dataset for the inventree-mbom plugin.
+"""Management command: create a test dataset for the inventree-mbom plugin.
 
 Usage (inside InvenTree environment):
     python manage.py mbom_create_test_data

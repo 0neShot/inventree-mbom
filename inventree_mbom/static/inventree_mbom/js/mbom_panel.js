@@ -1,4 +1,4 @@
-﻿/**
+/**
  * inventree-mbom: Manufacturing BOM & Routings Panel
  * Static JS module - handles all panel interactivity
  *
@@ -133,7 +133,7 @@ class MbomPanel {
 
     const tbody = document.getElementById('mbom-tbody');
     if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:20px;">
-      <span class="mbom-spinner"></span>&nbsp;Loading operations…
+      <span class="mbom-spinner"></span>&nbsp;Loading operationsâ€¦
     </td></tr>`;
 
     try {
@@ -228,14 +228,14 @@ class MbomPanel {
            <i class="fas fa-user-hard-hat"></i>
            ${this._rateName(op.labor_rate, 'labor')}
          </span>`
-      : '<span style="opacity:0.3">—</span>';
+      : '<span style="opacity:0.3">â€”</span>';
 
     const machineChip = op.machine_center
       ? `<span class="mbom-chip mbom-chip--machine" title="Machine">
            <i class="fas fa-cog"></i>
            ${this._rateName(op.machine_center, 'machine')}
          </span>`
-      : '<span style="opacity:0.3">—</span>';
+      : '<span style="opacity:0.3">â€”</span>';
 
     const cost = parseFloat(op.per_unit_cost || 0).toFixed(4);
 
@@ -404,7 +404,7 @@ class MbomPanel {
 
     const btn = document.getElementById('mbom-tmpl-apply-btn');
     btn.disabled = true;
-    btn.innerHTML = '<span class="mbom-spinner"></span> Applying…';
+    btn.innerHTML = '<span class="mbom-spinner"></span> Applyingâ€¦';
 
     try {
       await this.api('/apply-template/', {
@@ -505,7 +505,7 @@ class MbomPanel {
           method: 'POST',
           body: JSON.stringify({ part: this.partId, standard_batch_size: this.batchSize }),
         });
-        this.toast('Routing created — reloading…', 'info');
+        this.toast('Routing created â€” reloadingâ€¦', 'info');
         this._closeDialogs();
         setTimeout(() => location.reload(), 600);
         return;
@@ -529,7 +529,7 @@ class MbomPanel {
 
     const btn = document.getElementById('mbom-op-save-btn');
     btn.disabled = true;
-    btn.innerHTML = '<span class="mbom-spinner"></span> Saving…';
+    btn.innerHTML = '<span class="mbom-spinner"></span> Savingâ€¦';
 
     try {
       if (opId) {
@@ -622,3 +622,74 @@ document.addEventListener('DOMContentLoaded', () => {
     panel.init();
   }
 });
+
+
+// =========================================================
+// PUI React Integration Exports
+// =========================================================
+export function renderMbomPanel(target, context) {
+  if (!target) return;
+  const partId = context?.target_id || context?.id;
+  target.setAttribute('data-mbom-panel', 'true');
+
+  if (!document.getElementById('mbom-css')) {
+    const link = document.createElement('link');
+    link.id = 'mbom-css';
+    link.rel = 'stylesheet';
+    link.href = '/static/plugins/inventree-mbom/inventree_mbom/css/mbom.css';
+    document.head.appendChild(link);
+  }
+
+  target.innerHTML = '<div style=\"padding:16px;font-family:system-ui,-apple-system,sans-serif;\">' +
+    '<div style=\"display:flex;align-items:center;gap:10px;margin-bottom:12px;\">' +
+      '<span style=\"font-size:1.5rem;\">⚙️</span>' +
+      '<div>' +
+        '<strong style=\"font-size:1.1rem;\">Manufacturing Routing (mBOM)</strong>' +
+        '<div style=\"font-size:0.8rem;color:#6b7280;\">Hierarchical Process Routing &amp; Operational Costs</div>' +
+      '</div>' +
+    '</div>' +
+    '<div id=\"mbom-target-loading\" style=\"padding:20px;text-align:center;color:#6b7280;\">Loading routing...</div>' +
+  '</div>';
+
+  fetch('/plugin/inventree-mbom/panel/part/' + partId + '/', {
+    headers: { 'Accept': 'text/html' }
+  })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    })
+    .then(function(html) {
+      target.innerHTML = html;
+      if (window.MBOM_CONFIG) {
+        const panel = new MbomPanel(window.MBOM_CONFIG);
+        panel.init();
+      }
+    })
+    .catch(function(err) {
+      target.innerHTML = '<div style=\"padding:16px;color:#dc2626;background:#fee2e2;border-radius:8px;\">' +
+        '<strong>Error loading mBOM panel:</strong> ' + err.message +
+      '</div>';
+    });
+}
+
+export function renderMbomPricingPanel(target, context) {
+  if (!target) return;
+  const partId = context?.target_id || context?.id;
+  target.setAttribute('data-mbom-pricing-panel', 'true');
+
+  target.innerHTML = '<div style=\"padding:12px;color:#6b7280;\">Loading pricing...</div>';
+
+  fetch('/plugin/inventree-mbom/pricing-panel/' + partId + '/', {
+    headers: { 'Accept': 'text/html' }
+  })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    })
+    .then(function(html) {
+      target.innerHTML = html;
+    })
+    .catch(function(err) {
+      target.innerHTML = '<div style=\"padding:12px;color:#dc2626;\">Error: ' + err.message + '</div>';
+    });
+}

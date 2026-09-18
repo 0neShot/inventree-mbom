@@ -1,4 +1,4 @@
-﻿"""Pricing bridge for the inventree-mbom plugin.
+"""Pricing bridge for the inventree-mbom plugin.
 
 Solves the Core Blocker:
     InvenTree's PartPricing.bom_cost exclusively sums physical BOM items.
