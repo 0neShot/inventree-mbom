@@ -1,0 +1,537 @@
+﻿"""Django models for the inventree-mbom plugin.
+
+Data model hierarchy:
+  Central Tariff Catalog:
+    LaborRate           - Named hourly labor rate (Assembler, Machinist, etc.)
+    MachineCenter       - Named machine with hourly rate + CO2 factor
+
+  Process Templates (reusable blueprints):
+    ProcessTemplate     - Top-level template (e.g. "SMT Assembly Standard")
+    ProcessTemplateStep - Hierarchical step within a template (Op 10 -> 10.1, 10.2)
+
+  Part Routings (instantiated for a specific assembly):
+    PartRouting         - One routing per assembly part
+    RoutingOperation    - Individual operation on a part routing (parent + children)
+"""
+
+from decimal import Decimal
+from django.core.validators import MinValueValidator
+from django.db import models
+from django.utils.translation import gettext_lazy as _
+
+import part.models as inventree_part
+
+
+# ---------------------------------------------------------------------------
+# Central Tariff Catalog
+# ---------------------------------------------------------------------------
+
+class LaborRate(models.Model):
+    """A named labor classification with an hourly (or per-minute) rate.
+
+    Examples: Assembler @ 28 EUR/hr, Engineer @ 95 EUR/hr, Welder @ 42 EUR/hr
+    """
+
+    class Meta:
+        app_label = "inventree_mbom"
+        verbose_name = _("Labor Rate")
+        verbose_name_plural = _("Labor Rates")
+        ordering = ["name"]
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        verbose_name=_("Name"),
+        help_text=_("Labor classification name (e.g. Assembler, Engineer)"),
+    )
+
+    description = models.TextField(
+        blank=True,
+        verbose_name=_("Description"),
+    )
+
+    # Rate stored as EUR (or configured currency) per hour
+    hourly_rate = models.DecimalField(
+        max_digits=12,
+        decimal_places=4,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Hourly Rate"),
+        help_text=_("Labor cost per hour in the configured currency"),
+    )
+
+    currency = models.CharField(
+        max_length=10,
+        default="EUR",
+        verbose_name=_("Currency"),
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name=_("Active"),
+    )
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.hourly_rate} {self.currency}/hr)"
+
+    @property
+    def rate_per_minute(self) -> Decimal:
+        """Return the per-minute rate."""
+        return self.hourly_rate / Decimal("60")
+
+    @staticmethod
+    def get_api_url():
+        return "/plugin/inventree-mbom/labor-rate/"
+
+
+class MachineCenter(models.Model):
+    """A named machine workcenter with an hourly operating rate and CO2 factor.
+
+    Examples: 5-Axis CNC @ 120 EUR/hr, Reflow Oven @ 35 EUR/hr
+    """
+
+    class Meta:
+        app_label = "inventree_mbom"
+        verbose_name = _("Machine Center")
+        verbose_name_plural = _("Machine Centers")
+        ordering = ["name"]
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        verbose_name=_("Name"),
+        help_text=_("Machine center name (e.g. 5-Axis CNC, Reflow Oven)"),
+    )
+
+    description = models.TextField(
+        blank=True,
+        verbose_name=_("Description"),
+    )
+
+    hourly_rate = models.DecimalField(
+        max_digits=12,
+        decimal_places=4,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Hourly Rate"),
+        help_text=_("Machine operating cost per hour (power, depreciation, tooling)"),
+    )
+
+    currency = models.CharField(
+        max_length=10,
+        default="EUR",
+        verbose_name=_("Currency"),
+    )
+
+    # CO2 emission factor in kg CO2e per minute of operation
+    co2_factor_per_minute = models.DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        default=Decimal("0.000000"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("CO₂ Factor (kg/min)"),
+        help_text=_("CO₂ equivalent emissions per minute of machine operation"),
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name=_("Active"),
+    )
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.hourly_rate} {self.currency}/hr)"
+
+    @property
+    def rate_per_minute(self) -> Decimal:
+        """Return the per-minute rate."""
+        return self.hourly_rate / Decimal("60")
+
+    @staticmethod
+    def get_api_url():
+        return "/plugin/inventree-mbom/machine-center/"
+
+
+# ---------------------------------------------------------------------------
+# Process Templates (Reusable Blueprints)
+# ---------------------------------------------------------------------------
+
+class ProcessTemplate(models.Model):
+    """A reusable process routing template.
+
+    Templates are applied to assemblies to seed a PartRouting with
+    pre-configured operations, which engineers can then customise.
+
+    Examples: "SMT Assembly Standard", "CNC 5-Axis Turning"
+    """
+
+    class Meta:
+        app_label = "inventree_mbom"
+        verbose_name = _("Process Template")
+        verbose_name_plural = _("Process Templates")
+        ordering = ["name"]
+
+    name = models.CharField(
+        max_length=200,
+        unique=True,
+        verbose_name=_("Template Name"),
+    )
+
+    description = models.TextField(
+        blank=True,
+        verbose_name=_("Description"),
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name=_("Active"),
+    )
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+    @staticmethod
+    def get_api_url():
+        return "/plugin/inventree-mbom/process-template/"
+
+
+class ProcessTemplateStep(models.Model):
+    """A hierarchical step within a ProcessTemplate.
+
+    Steps support parent/child nesting to model:
+      Op 10: SMT Assembly
+        10.1: Stencil Paste
+        10.2: Pick & Place
+        10.3: Reflow
+
+    Each step independently specifies labor and machine resources
+    with fixed setup time and per-unit cycle time.
+    """
+
+    class Meta:
+        app_label = "inventree_mbom"
+        verbose_name = _("Process Template Step")
+        verbose_name_plural = _("Process Template Steps")
+        ordering = ["template", "sequence_number"]
+
+    template = models.ForeignKey(
+        ProcessTemplate,
+        on_delete=models.CASCADE,
+        related_name="steps",
+        verbose_name=_("Process Template"),
+    )
+
+    parent_step = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="sub_steps",
+        verbose_name=_("Parent Step"),
+        help_text=_("Leave blank for top-level operations"),
+    )
+
+    # e.g. "10", "10.1", "10.2", "20"
+    sequence_number = models.CharField(
+        max_length=20,
+        verbose_name=_("Sequence Number"),
+        help_text=_("Operation sequence (e.g. 10, 10.1, 20)"),
+    )
+
+    name = models.CharField(
+        max_length=200,
+        verbose_name=_("Step Name"),
+    )
+
+    description = models.TextField(
+        blank=True,
+        verbose_name=_("Description / Tool Notes"),
+    )
+
+    # Labor resource
+    labor_rate = models.ForeignKey(
+        LaborRate,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="template_steps",
+        verbose_name=_("Labor Rate"),
+    )
+
+    # Machine resource
+    machine_center = models.ForeignKey(
+        MachineCenter,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="template_steps",
+        verbose_name=_("Machine Center"),
+    )
+
+    # Times in decimal minutes
+    setup_time_minutes = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        default=Decimal("0.0000"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Setup Time (min)"),
+        help_text=_("Fixed setup time in minutes (charged once per batch)"),
+    )
+
+    run_time_per_unit_minutes = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        default=Decimal("0.0000"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Run Time per Unit (min)"),
+        help_text=_("Cycle time per unit in minutes"),
+    )
+
+    def __str__(self):
+        return f"[{self.sequence_number}] {self.name}"
+
+
+# ---------------------------------------------------------------------------
+# Part Routings (Per-Assembly Instances)
+# ---------------------------------------------------------------------------
+
+class PartRouting(models.Model):
+    """The manufacturing routing assigned to a specific assembly part.
+
+    One PartRouting per part. Contains RoutingOperations that may be
+    seeded from a ProcessTemplate or built from scratch.
+    """
+
+    class Meta:
+        app_label = "inventree_mbom"
+        verbose_name = _("Part Routing")
+        verbose_name_plural = _("Part Routings")
+
+    part = models.OneToOneField(
+        inventree_part.Part,
+        on_delete=models.CASCADE,
+        related_name="mbom_routing",
+        verbose_name=_("Part"),
+        limit_choices_to={"assembly": True},
+    )
+
+    source_template = models.ForeignKey(
+        ProcessTemplate,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="applied_routings",
+        verbose_name=_("Source Template"),
+        help_text=_("Template this routing was seeded from (informational)"),
+    )
+
+    # Standard batch size used to amortise fixed setup costs
+    standard_batch_size = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        verbose_name=_("Standard Batch Size"),
+        help_text=_("Used to amortise setup costs into per-unit cost"),
+    )
+
+    notes = models.TextField(
+        blank=True,
+        verbose_name=_("Notes"),
+    )
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Routing: {self.part}"
+
+    @staticmethod
+    def get_api_url():
+        return "/plugin/inventree-mbom/routing/"
+
+    # ------------------------------------------------------------------
+    # Cost computation helpers
+    # ------------------------------------------------------------------
+
+    def _get_top_level_operations(self):
+        return self.operations.filter(parent_operation__isnull=True)
+
+    def total_labor_cost(self, batch_size: int = None) -> Decimal:
+        """Sum of labor costs for all operations at all levels."""
+        qty = batch_size or self.standard_batch_size
+        total = Decimal("0.00")
+        for op in self.operations.all():
+            total += op.labor_cost(qty)
+        return total
+
+    def total_machine_cost(self, batch_size: int = None) -> Decimal:
+        """Sum of machine costs for all operations at all levels."""
+        qty = batch_size or self.standard_batch_size
+        total = Decimal("0.00")
+        for op in self.operations.all():
+            total += op.machine_cost(qty)
+        return total
+
+    def total_manufacturing_cost(self, batch_size: int = None) -> Decimal:
+        """Total labor + machine cost for this routing."""
+        qty = batch_size or self.standard_batch_size
+        return self.total_labor_cost(qty) + self.total_machine_cost(qty)
+
+    def total_co2_kg(self, batch_size: int = None) -> Decimal:
+        """Total CO₂ emissions in kg for this routing."""
+        qty = batch_size or self.standard_batch_size
+        total = Decimal("0.000000")
+        for op in self.operations.all():
+            total += op.co2_kg(qty)
+        return total
+
+    def per_unit_manufacturing_cost(self) -> Decimal:
+        """Per-unit manufacturing cost (total divided by batch size)."""
+        total = self.total_manufacturing_cost()
+        return total / Decimal(str(self.standard_batch_size))
+
+
+class RoutingOperation(models.Model):
+    """A single operation (or sub-step) within a PartRouting.
+
+    Supports two-level hierarchy: parent operations and child sub-steps.
+    Cost = setup_cost (fixed/batch) + run_cost (per unit * qty).
+    """
+
+    class Meta:
+        app_label = "inventree_mbom"
+        verbose_name = _("Routing Operation")
+        verbose_name_plural = _("Routing Operations")
+        ordering = ["routing", "sequence_number"]
+
+    routing = models.ForeignKey(
+        PartRouting,
+        on_delete=models.CASCADE,
+        related_name="operations",
+        verbose_name=_("Part Routing"),
+    )
+
+    parent_operation = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="sub_operations",
+        verbose_name=_("Parent Operation"),
+    )
+
+    sequence_number = models.CharField(
+        max_length=20,
+        verbose_name=_("Sequence"),
+        help_text=_("e.g. 10, 10.1, 10.2, 20"),
+    )
+
+    name = models.CharField(
+        max_length=200,
+        verbose_name=_("Operation Name"),
+    )
+
+    description = models.TextField(
+        blank=True,
+        verbose_name=_("Description / Tool Notes"),
+    )
+
+    labor_rate = models.ForeignKey(
+        LaborRate,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="routing_operations",
+        verbose_name=_("Labor Rate"),
+    )
+
+    machine_center = models.ForeignKey(
+        MachineCenter,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="routing_operations",
+        verbose_name=_("Machine Center"),
+    )
+
+    # Times in decimal minutes
+    setup_time_minutes = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        default=Decimal("0.0000"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Setup Time (min)"),
+    )
+
+    run_time_per_unit_minutes = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        default=Decimal("0.0000"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Run Time per Unit (min)"),
+    )
+
+    is_active = models.BooleanField(default=True, verbose_name=_("Active"))
+
+    def __str__(self):
+        return f"[{self.sequence_number}] {self.name} ({self.routing.part})"
+
+    # ------------------------------------------------------------------
+    # Cost computation
+    # ------------------------------------------------------------------
+
+    def _labor_rate_per_min(self) -> Decimal:
+        if self.labor_rate:
+            return self.labor_rate.rate_per_minute
+        return Decimal("0.00")
+
+    def _machine_rate_per_min(self) -> Decimal:
+        if self.machine_center:
+            return self.machine_center.rate_per_minute
+        return Decimal("0.00")
+
+    def labor_setup_cost(self) -> Decimal:
+        """Fixed labor cost for setup (once per batch)."""
+        return self.setup_time_minutes * self._labor_rate_per_min()
+
+    def labor_run_cost_per_unit(self) -> Decimal:
+        """Labor cost per unit produced."""
+        return self.run_time_per_unit_minutes * self._labor_rate_per_min()
+
+    def labor_cost(self, batch_size: int = 1) -> Decimal:
+        """Total labor cost for a given batch size."""
+        return self.labor_setup_cost() + (self.labor_run_cost_per_unit() * batch_size)
+
+    def machine_setup_cost(self) -> Decimal:
+        """Fixed machine cost for setup (once per batch)."""
+        return self.setup_time_minutes * self._machine_rate_per_min()
+
+    def machine_run_cost_per_unit(self) -> Decimal:
+        """Machine cost per unit produced."""
+        return self.run_time_per_unit_minutes * self._machine_rate_per_min()
+
+    def machine_cost(self, batch_size: int = 1) -> Decimal:
+        """Total machine cost for a given batch size."""
+        return self.machine_setup_cost() + (self.machine_run_cost_per_unit() * batch_size)
+
+    def total_cost(self, batch_size: int = 1) -> Decimal:
+        """Combined labor + machine cost."""
+        return self.labor_cost(batch_size) + self.machine_cost(batch_size)
+
+    def per_unit_cost(self, batch_size: int = 1) -> Decimal:
+        """Per-unit cost amortised over batch size."""
+        return self.total_cost(batch_size) / Decimal(str(batch_size))
+
+    def co2_kg(self, batch_size: int = 1) -> Decimal:
+        """CO₂ emissions in kg for this operation."""
+        if not self.machine_center:
+            return Decimal("0.000000")
+        total_machine_minutes = (
+            self.setup_time_minutes + (self.run_time_per_unit_minutes * batch_size)
+        )
+        return total_machine_minutes * self.machine_center.co2_factor_per_minute
