@@ -1,11 +1,4 @@
 {% load i18n static %}
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <link rel="stylesheet" href="/static/plugins/inventree-mbom/inventree_mbom/css/mbom.css">
-</head>
-<body>
 <div class="mbom-root" id="mbom-root">
 
   <!-- ===================== Toolbar ===================== -->
@@ -285,33 +278,3 @@
   ]
 }
 </script>
-<script>
-window.MBOM_CONFIG = {
-  partId:       {{ part.pk }},
-  routingId:    {% if routing %}{{ routing.pk }}{% else %}null{% endif %},
-  pluginBase:   '/plugin/inventree-mbom',
-  currency:     '{{ currency|default:"EUR" }}',
-  batchSize:    {{ routing.standard_batch_size|default:1 }},
-
-  /* Serialised lookups so JS can resolve names without extra API calls */
-  laborRates: [
-    {% for lr in labor_rates %}
-    { pk: {{ lr.pk }}, name: "{{ lr.name|escapejs }}", hourly_rate: "{{ lr.hourly_rate }}", currency: "{{ lr.currency }}" }{% if not forloop.last %},{% endif %}
-    {% endfor %}
-  ],
-  machineCenters: [
-    {% for mc in machine_centers %}
-    { pk: {{ mc.pk }}, name: "{{ mc.name|escapejs }}", hourly_rate: "{{ mc.hourly_rate }}", currency: "{{ mc.currency }}" }{% if not forloop.last %},{% endif %}
-    {% endfor %}
-  ],
-  templates: [
-    {% for t in templates %}
-    { pk: {{ t.pk }}, name: "{{ t.name|escapejs }}" }{% if not forloop.last %},{% endif %}
-    {% endfor %}
-  ],
-};
-</script>
-<script src="/static/plugins/inventree-mbom/inventree_mbom/js/mbom_panel.js"></script>
-
-</body>
-</html>

@@ -31,8 +31,12 @@ class MbomPanel {
   // CSRF helper
   // =========================================================
   _csrf() {
-    const m = document.cookie.match(/csrftoken=([^;]+)/);
-    return m ? m[1] : '';
+    const name = 'csrftoken';
+    for (const cookie of document.cookie.split(';')) {
+      const [k, v] = cookie.trim().split('=');
+      if (k === name) return decodeURIComponent(v || '');
+    }
+    return '';
   }
 
   // =========================================================
@@ -165,9 +169,16 @@ class MbomPanel {
       this._renderOpsTable(this.ops);
       this._populateParentSelect(this.ops);
     } catch (e) {
-      if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="color:var(--bs-danger,red);padding:14px;">
-        <i class="fas fa-exclamation-triangle"></i> ${e.message}
-      </td></tr>`;
+      const container = document.getElementById('mbom-ops-container');
+      if (container) {
+        container.innerHTML = `<div style="color:var(--bs-danger,#dc2626);padding:14px;background:var(--bs-danger-bg-subtle,#fee2e2);border-radius:6px;">
+          <i class="fas fa-exclamation-triangle"></i> Error loading operations: ${e.message}
+        </div>`;
+      } else if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="9" style="color:var(--bs-danger,red);padding:14px;">
+          <i class="fas fa-exclamation-triangle"></i> ${e.message}
+        </td></tr>`;
+      }
     }
   }
 
@@ -653,7 +664,11 @@ document.addEventListener('DOMContentLoaded', () => {
 // =========================================================
 export async function renderMbomPanel(target, context) {
   if (!target) return;
-  const partId = context?.target_id || context?.id;
+  let partId = context?.target_id || context?.id || context?.instance?.pk || context?.instance?.id;
+  if (!partId) {
+    const m = window.location.pathname.match(/\/part\/(\d+)/);
+    if (m) partId = m[1];
+  }
   target.setAttribute('data-mbom-panel', 'true');
 
   if (!document.getElementById('mbom-css')) {
@@ -672,12 +687,18 @@ export async function renderMbomPanel(target, context) {
         '<div style="font-size:0.8rem;color:#6b7280;">Hierarchical Process Routing &amp; Operational Costs</div>' +
       '</div>' +
     '</div>' +
-    '<div id="mbom-target-loading" style="padding:20px;text-align:center;color:#6b7280;">Loading routing...</div>' +
+    '<div id="mbom-target-loading" style="padding:20px;text-align:center;color:#6b7280;"><span class="mbom-spinner"></span> Loading routing…</div>' +
   '</div>';
 
   try {
+    const headers = { 'Accept': 'text/html, */*' };
+    const token = localStorage.getItem('inventree-token') ||
+                  sessionStorage.getItem('inventree-token') ||
+                  localStorage.getItem('token') ||
+                  sessionStorage.getItem('token');
+    if (token) headers['Authorization'] = `Token ${token}`;
     const res = await fetch('/plugin/inventree-mbom/panel/part/' + partId + '/', {
-      headers: { 'Accept': 'text/html, */*' },
+      headers,
       credentials: 'include',
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -729,6 +750,7 @@ export async function renderMbomPanel(target, context) {
     window.MBOM_CONFIG = config;
     const panel = new MbomPanel(config);
     window._mbomPanel = panel;
+    window.MBOM_PANEL = panel;
     await panel.init();
   } catch (err) {
     target.innerHTML = '<div style="padding:16px;color:#dc2626;background:#fee2e2;border-radius:8px;">' +
@@ -739,14 +761,24 @@ export async function renderMbomPanel(target, context) {
 
 export async function renderMbomPricingPanel(target, context) {
   if (!target) return;
-  const partId = context?.target_id || context?.id;
+  let partId = context?.target_id || context?.id || context?.instance?.pk || context?.instance?.id;
+  if (!partId) {
+    const m = window.location.pathname.match(/\/part\/(\d+)/);
+    if (m) partId = m[1];
+  }
   target.setAttribute('data-mbom-pricing-panel', 'true');
 
   target.innerHTML = '<div style="padding:12px;color:#6b7280;">Loading pricing...</div>';
 
   try {
+    const headers = { 'Accept': 'text/html, */*' };
+    const token = localStorage.getItem('inventree-token') ||
+                  sessionStorage.getItem('inventree-token') ||
+                  localStorage.getItem('token') ||
+                  sessionStorage.getItem('token');
+    if (token) headers['Authorization'] = `Token ${token}`;
     const res = await fetch('/plugin/inventree-mbom/pricing-panel/' + partId + '/', {
-      headers: { 'Accept': 'text/html, */*' },
+      headers,
       credentials: 'include',
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
