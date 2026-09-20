@@ -41,7 +41,15 @@ async function mbomApi(path, opts = {}, pluginBase = '/plugin/inventree-mbom') {
   try { data = JSON.parse(text); } catch { data = { detail: text }; }
 
   if (!res.ok) {
-    const msg = data?.detail || data?.error || JSON.stringify(data) || `HTTP ${res.status}`;
+    let msg = data?.detail || data?.error;
+    if (!msg && typeof data === 'object') {
+      const fieldErrors = Object.entries(data).map(([k, v]) => {
+        const errText = Array.isArray(v) ? v.join(', ') : String(v);
+        return `${k}: ${errText}`;
+      });
+      if (fieldErrors.length > 0) msg = fieldErrors.join('; ');
+    }
+    msg = msg || JSON.stringify(data) || `HTTP ${res.status}`;
     throw new Error(msg);
   }
   return data;
@@ -246,7 +254,41 @@ class MbomPanel {
     if (!container) return;
 
     if (!ops || ops.length === 0) {
-      this._renderEmpty();
+      container.innerHTML = `
+        <div class="mbom-table-wrapper">
+          <table class="mbom-table" id="mbom-table">
+            <thead>
+              <tr>
+                <th class="col-drag"></th>
+                <th>Seq</th>
+                <th>Operation</th>
+                <th class="col-hide-sm">Labor Rate</th>
+                <th class="col-hide-sm">Machine</th>
+                <th style="text-align:right;">Setup (min)</th>
+                <th style="text-align:right;">Cycle (min)</th>
+                <th style="text-align:right;">Unit Cost</th>
+                <th class="col-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="mbom-tbody">
+              <tr>
+                <td colspan="9" style="text-align:center;padding:36px 16px;color:var(--bs-secondary,#6c757d);">
+                  <div style="font-size:1.6rem;margin-bottom:8px;">📋</div>
+                  <div style="font-weight:600;font-size:0.95rem;margin-bottom:4px;">No operations defined yet</div>
+                  <div style="font-size:0.82rem;margin-bottom:14px;opacity:0.8;">This routing is empty. Add your first operation or apply a process template.</div>
+                  <div style="display:flex;justify-content:center;gap:10px;">
+                    <button class="mbom-btn mbom-btn--success" data-action="open-add-op">
+                      <i class="fas fa-plus"></i> Add First Operation
+                    </button>
+                    <button class="mbom-btn mbom-btn--ghost" data-action="open-template-dialog">
+                      <i class="fas fa-magic"></i> Apply Template
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>`;
       return;
     }
 
@@ -432,7 +474,21 @@ class MbomPanel {
       this.toast('Empty routing created. Add operations below!');
       await this.loadCostSummary();
       await this.loadOperations();
+      this.showAddOpModal();
     } catch (err) {
+      // If routing already exists, gracefully recover it
+      try {
+        const rList = await this.api(`/routing/?part=${this.partId}`);
+        const routings = Array.isArray(rList) ? rList : (rList.results || []);
+        if (routings.length > 0) {
+          this.routingId = routings[0].pk;
+          this.toast('Routing loaded. Add operations below!');
+          await this.loadCostSummary();
+          await this.loadOperations();
+          this.showAddOpModal();
+          return;
+        }
+      } catch (e) {}
       this.toast(`Failed to create routing: ${err.message}`, 'error');
     }
   }

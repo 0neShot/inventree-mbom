@@ -148,6 +148,15 @@ class PartRoutingList(MBomPermissionMixin, ListCreateAPI):
             qs = qs.filter(part_id=part_id)
         return qs
 
+    def create(self, request, *args, **kwargs):
+        part_id = request.data.get("part")
+        if part_id:
+            existing = PartRouting.objects.filter(part_id=part_id).first()
+            if existing:
+                serializer = self.get_serializer(existing)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+        return super().create(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         instance = serializer.save()
         from .pricing import MbomPricingService

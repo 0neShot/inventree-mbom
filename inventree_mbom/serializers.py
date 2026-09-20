@@ -210,6 +210,13 @@ class PartRoutingSerializer(serializers.ModelSerializer):
             "total_co2_kg",
         ]
         read_only_fields = ["pk", "created", "updated"]
+        extra_kwargs = {
+            "part": {
+                "error_messages": {
+                    "unique": "A manufacturing routing for this part already exists.",
+                }
+            }
+        }
 
     def get_operations(self, obj):
         top_level = obj.operations.filter(

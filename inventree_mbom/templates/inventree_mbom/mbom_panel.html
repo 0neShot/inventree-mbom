@@ -93,7 +93,7 @@
 
   <!-- ===================== Operations Table / Empty State ===================== -->
   <div id="mbom-ops-container">
-    {% if not routing or not routing.operations.exists %}
+    {% if not routing %}
     <div class="mbom-empty mbom-quickstart-hero">
       <div class="mbom-quickstart-icon">⚙️</div>
       <h4 class="mbom-quickstart-title">{% trans "Manufacturing Routing (mBOM)" %}</h4>
