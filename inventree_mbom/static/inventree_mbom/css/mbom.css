@@ -161,7 +161,9 @@
 }
 
 /* Header */
-.mbom-table thead th {
+.mbom-table th,
+.mbom-table thead th,
+.mbom-table-wrapper th {
   background: var(--bs-secondary-bg, #f8f9fa);
   padding: 9px 10px;
   font-size: 0.72rem;
@@ -173,6 +175,7 @@
   position: sticky;
   top: 0;
   z-index: 2;
+  text-align: left;
 }
 
 .mbom-table thead th.col-actions {

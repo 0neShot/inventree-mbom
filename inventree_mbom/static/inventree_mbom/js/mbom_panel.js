@@ -141,14 +141,14 @@ class MbomPanel {
     if (matEl) {
       const min = fmt(d.material_cost, 2);
       const max = fmt(d.material_cost_max, 2);
-      matEl.textContent = (min === max || parseFloat(max) <= 0) ? `${min} ${cur}` : `${min}..${max} ${cur}`;
+      matEl.textContent = (min === max || parseFloat(max) <= 0) ? `${min} ${cur}` : `${min} to ${max} ${cur}`;
     }
     if (labEl) labEl.textContent = `${fmt(d.labor_cost, 2)} ${cur}`;
     if (macEl) macEl.textContent = `${fmt(d.machine_cost, 2)} ${cur}`;
     if (totEl) {
       const tMin = fmt(d.per_unit_total_cost, 2);
       const tMax = fmt(d.per_unit_total_cost_max, 2);
-      totEl.textContent = (tMin === tMax || parseFloat(tMax) <= 0) ? `${tMin} ${cur}` : `${tMin}..${tMax} ${cur}`;
+      totEl.textContent = (tMin === tMax || parseFloat(tMax) <= 0) ? `${tMin} ${cur}` : `${tMin} to ${tMax} ${cur}`;
     }
     if (co2El) co2El.textContent = `${fmt(d.co2_kg, 4)} kg`;
 
@@ -328,8 +328,8 @@ class MbomPanel {
       <td class="col-hide-sm">${laborChip}</td>
       <td class="col-hide-sm">${machineChip}</td>
       <td style="text-align:right;">
-        <input type="number" step="0.1" min="0" class="mbom-input" 
-               value="${parseFloat(op.setup_time_minutes || 0).toFixed(2)}"
+        <input type="number" step="1" min="0" class="mbom-input" 
+               value="${parseFloat(op.setup_time_minutes || 0)}"
                data-inline-field="setup_time_minutes"
                title="Click to edit setup time in minutes" 
                style="width:68px;padding:2px 4px;font-size:0.82rem;text-align:right;background:transparent;border:1px solid transparent;border-radius:4px;"
@@ -337,8 +337,8 @@ class MbomPanel {
                onblur="this.style.border='1px solid transparent';this.style.background='transparent';">
       </td>
       <td style="text-align:right;">
-        <input type="number" step="0.1" min="0" class="mbom-input" 
-               value="${parseFloat(op.run_time_per_unit_minutes || 0).toFixed(2)}"
+        <input type="number" step="1" min="0" class="mbom-input" 
+               value="${parseFloat(op.run_time_per_unit_minutes || 0)}"
                data-inline-field="run_time_per_unit_minutes"
                title="Click to edit cycle time per unit in minutes" 
                style="width:68px;padding:2px 4px;font-size:0.82rem;text-align:right;background:transparent;border:1px solid transparent;border-radius:4px;"
@@ -1472,11 +1472,11 @@ export async function renderMbomSettingsPanel(target, context) {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div class="mbom-form-group">
           <label class="mbom-form-label">Setup Time (minutes)</label>
-          <input type="number" step="0.1" min="0" id="mbom-sm-s-setup" class="mbom-input" value="${step ? step.setup_time_minutes : '0.0'}">
+          <input type="number" step="1" min="0" id="mbom-sm-s-setup" class="mbom-input" value="${step ? parseFloat(step.setup_time_minutes || 0) : '0'}">
         </div>
         <div class="mbom-form-group">
           <label class="mbom-form-label">Cycle / Run Time (minutes/unit)</label>
-          <input type="number" step="0.1" min="0" id="mbom-sm-s-cycle" class="mbom-input" value="${step ? step.run_time_per_unit_minutes : '1.0'}">
+          <input type="number" step="1" min="0" id="mbom-sm-s-cycle" class="mbom-input" value="${step ? parseFloat(step.run_time_per_unit_minutes || 0) : '1'}">
         </div>
       </div>
     `;
