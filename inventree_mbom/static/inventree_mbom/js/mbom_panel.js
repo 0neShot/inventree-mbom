@@ -5,6 +5,20 @@
  */
 
 // =========================================================
+// Helper: Ensure mbom.css is loaded in DOM
+// =========================================================
+export function ensureMbomCss() {
+  if (typeof document !== 'undefined' && !document.getElementById('inventree-mbom-css')) {
+    const link = document.createElement('link');
+    link.id = 'inventree-mbom-css';
+    link.rel = 'stylesheet';
+    link.href = '/static/plugins/inventree-mbom/inventree_mbom/css/mbom.css';
+    document.head.appendChild(link);
+  }
+}
+ensureMbomCss();
+
+// =========================================================
 // Helper: CSRF Cookie
 // =========================================================
 function getCsrfToken() {
@@ -933,6 +947,7 @@ class MbomPanel {
 // =========================================================
 export async function renderMbomSettingsPanel(target, context) {
   if (!target) return;
+  ensureMbomCss();
 
   target.setAttribute('data-mbom-settings', 'true');
 
@@ -1137,9 +1152,9 @@ export async function renderMbomSettingsPanel(target, context) {
       </div>
       <div class="mbom-form-group">
         <label class="mbom-form-label">Description</label>
-        <input type="text" id="mbom-sm-l-desc" class="mbom-input" value="${r ? (r.description || '') : ''}">
+        <input type="text" id="mbom-sm-l-desc" class="mbom-input" value="${r ? (r.description || '') : ''}" placeholder="Optional role description">
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="mbom-form-row">
         <div class="mbom-form-group">
           <label class="mbom-form-label">Hourly Rate *</label>
           <input type="number" step="0.01" id="mbom-sm-l-rate" class="mbom-input" value="${r ? r.hourly_rate : '45.00'}">
@@ -1149,12 +1164,10 @@ export async function renderMbomSettingsPanel(target, context) {
           <input type="text" id="mbom-sm-l-cur" class="mbom-input" value="${r ? (r.currency || 'EUR') : 'EUR'}">
         </div>
       </div>
-      <div class="mbom-form-group" style="margin-top:8px;">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.85rem;">
-          <input type="checkbox" id="mbom-sm-l-active" ${!r || r.is_active ? 'checked' : ''}>
-          <span>Active Tariff</span>
-        </label>
-      </div>
+      <label class="mbom-form-check">
+        <input type="checkbox" id="mbom-sm-l-active" ${!r || r.is_active ? 'checked' : ''}>
+        <span>Active Tariff</span>
+      </label>
     `;
 
     currentSaveHandler = async () => {
@@ -1240,9 +1253,9 @@ export async function renderMbomSettingsPanel(target, context) {
       </div>
       <div class="mbom-form-group">
         <label class="mbom-form-label">Description</label>
-        <input type="text" id="mbom-sm-m-desc" class="mbom-input" value="${m ? (m.description || '') : ''}">
+        <input type="text" id="mbom-sm-m-desc" class="mbom-input" value="${m ? (m.description || '') : ''}" placeholder="Optional machine specifications">
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="mbom-form-row">
         <div class="mbom-form-group">
           <label class="mbom-form-label">Hourly Rate *</label>
           <input type="number" step="0.01" id="mbom-sm-m-rate" class="mbom-input" value="${m ? m.hourly_rate : '60.00'}">
@@ -1252,12 +1265,10 @@ export async function renderMbomSettingsPanel(target, context) {
           <input type="number" step="0.0001" id="mbom-sm-m-co2" class="mbom-input" value="${m ? (m.co2_factor_per_minute || '0.0015') : '0.0015'}">
         </div>
       </div>
-      <div class="mbom-form-group" style="margin-top:8px;">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.85rem;">
-          <input type="checkbox" id="mbom-sm-m-active" ${!m || m.is_active ? 'checked' : ''}>
-          <span>Active Machine Center</span>
-        </label>
-      </div>
+      <label class="mbom-form-check">
+        <input type="checkbox" id="mbom-sm-m-active" ${!m || m.is_active ? 'checked' : ''}>
+        <span>Active Machine Center</span>
+      </label>
     `;
 
     currentSaveHandler = async () => {
@@ -1315,17 +1326,20 @@ export async function renderMbomSettingsPanel(target, context) {
     container.innerHTML = templates.map(t => {
       const steps = t.steps || [];
       return `
-        <div class="mbom-tmpl-card">
-          <div class="mbom-tmpl-header">
-            <div>
-              <div style="font-weight:700;font-size:0.95rem;display:flex;align-items:center;gap:8px;">
-                <span>${t.name}</span>
-                <span class="mbom-badge ${t.is_active ? 'mbom-badge--active' : 'mbom-badge--inactive'}">
-                  ${t.is_active ? 'Active' : 'Inactive'}
-                </span>
-                <span style="font-size:0.75rem;opacity:0.65;font-weight:normal;">${steps.length} Root Steps</span>
+        <div class="mbom-tmpl-card collapsed" id="mbom-tmpl-card-${t.pk}">
+          <div class="mbom-tmpl-header" data-settings-action="toggle-template" data-pk="${t.pk}" style="cursor:pointer;user-select:none;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span class="mbom-tmpl-chevron" style="font-size:0.75rem;opacity:0.6;">▶</span>
+              <div>
+                <div style="font-weight:700;font-size:0.95rem;display:flex;align-items:center;gap:8px;">
+                  <span>${t.name}</span>
+                  <span class="mbom-badge ${t.is_active ? 'mbom-badge--active' : 'mbom-badge--inactive'}">
+                    ${t.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                  <span style="font-size:0.75rem;opacity:0.65;font-weight:normal;">${steps.length} Root Steps</span>
+                </div>
+                ${t.description ? `<div style="font-size:0.8rem;opacity:0.7;margin-top:2px;">${t.description}</div>` : ''}
               </div>
-              ${t.description ? `<div style="font-size:0.8rem;opacity:0.7;margin-top:2px;">${t.description}</div>` : ''}
             </div>
             <div class="mbom-actions">
               <button class="mbom-btn mbom-btn--success" data-settings-action="add-step" data-pk="${t.pk}"><i class="fas fa-plus"></i> Add Step</button>
@@ -1333,7 +1347,7 @@ export async function renderMbomSettingsPanel(target, context) {
               <button class="mbom-btn mbom-btn--danger" data-settings-action="delete-template" data-pk="${t.pk}"><i class="fas fa-trash"></i> Delete</button>
             </div>
           </div>
-          <div style="padding:10px 14px;">
+          <div class="mbom-tmpl-body" style="padding:10px 14px;">
             ${renderTemplateStepsTable(t, steps)}
           </div>
         </div>
@@ -1421,14 +1435,12 @@ export async function renderMbomSettingsPanel(target, context) {
       </div>
       <div class="mbom-form-group">
         <label class="mbom-form-label">Description</label>
-        <textarea id="mbom-sm-t-desc" class="mbom-input" rows="3">${t ? (t.description || '') : ''}</textarea>
+        <textarea id="mbom-sm-t-desc" class="mbom-input" rows="3" placeholder="Optional overview of this routing template…">${t ? (t.description || '') : ''}</textarea>
       </div>
-      <div class="mbom-form-group">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.85rem;">
-          <input type="checkbox" id="mbom-sm-t-active" ${!t || t.is_active ? 'checked' : ''}>
-          <span>Active Template</span>
-        </label>
-      </div>
+      <label class="mbom-form-check">
+        <input type="checkbox" id="mbom-sm-t-active" ${!t || t.is_active ? 'checked' : ''}>
+        <span>Active Template</span>
+      </label>
     `;
 
     currentSaveHandler = async () => {
@@ -1488,7 +1500,7 @@ export async function renderMbomSettingsPanel(target, context) {
     ).join('');
 
     modalBody.innerHTML = `
-      <div style="display:grid;grid-template-columns:100px 1fr;gap:10px;">
+      <div style="display:grid;grid-template-columns:100px 1fr;gap:12px;margin-bottom:12px;">
         <div class="mbom-form-group">
           <label class="mbom-form-label">Sequence *</label>
           <input type="text" id="mbom-sm-s-seq" class="mbom-input" value="${step ? step.sequence_number : '10'}">
@@ -1507,9 +1519,9 @@ export async function renderMbomSettingsPanel(target, context) {
       </div>
       <div class="mbom-form-group">
         <label class="mbom-form-label">Description</label>
-        <input type="text" id="mbom-sm-s-desc" class="mbom-input" value="${step ? (step.description || '') : ''}">
+        <input type="text" id="mbom-sm-s-desc" class="mbom-input" value="${step ? (step.description || '') : ''}" placeholder="Optional instructions or notes">
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="mbom-form-row">
         <div class="mbom-form-group">
           <label class="mbom-form-label">Labor Rate</label>
           <select id="mbom-sm-s-labor" class="mbom-select">
@@ -1525,7 +1537,7 @@ export async function renderMbomSettingsPanel(target, context) {
           </select>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="mbom-form-row">
         <div class="mbom-form-group">
           <label class="mbom-form-label">Setup Time (minutes)</label>
           <input type="number" step="1" min="0" id="mbom-sm-s-setup" class="mbom-input" value="${step ? parseFloat(step.setup_time_minutes || 0) : '0'}">
@@ -1610,6 +1622,10 @@ export async function renderMbomSettingsPanel(target, context) {
     const pk = actionEl.dataset.pk;
 
     if (act === 'refresh') loadAll();
+    else if (act === 'toggle-template') {
+      const card = target.querySelector(`#mbom-tmpl-card-${pk}`);
+      if (card) card.classList.toggle('collapsed');
+    }
     else if (act === 'add-labor') openLaborModal(null);
     else if (act === 'edit-labor') openLaborModal(laborRates.find(r => r.pk == pk));
     else if (act === 'delete-labor') deleteLaborRate(pk);
@@ -1619,7 +1635,11 @@ export async function renderMbomSettingsPanel(target, context) {
     else if (act === 'add-template') openTemplateModal(null);
     else if (act === 'edit-template') openTemplateModal(templates.find(t => t.pk == pk));
     else if (act === 'delete-template') deleteTemplate(pk);
-    else if (act === 'add-step') openStepModal(templates.find(t => t.pk == pk), null);
+    else if (act === 'add-step') {
+      const card = target.querySelector(`#mbom-tmpl-card-${pk}`);
+      if (card) card.classList.remove('collapsed');
+      openStepModal(templates.find(t => t.pk == pk), null);
+    }
     else if (act === 'edit-step') {
       const tmpl = templates.find(t => t.pk == actionEl.dataset.tmplId);
       openStepModal(tmpl, findStepInTemplate(tmpl, actionEl.dataset.stepId));
@@ -1896,13 +1916,7 @@ export async function renderMbomPanel(target, context) {
   }
 
   // Ensure CSS is loaded
-  if (!document.getElementById('inventree-mbom-css')) {
-    const link = document.createElement('link');
-    link.id = 'inventree-mbom-css';
-    link.rel = 'stylesheet';
-    link.href = '/static/plugins/inventree-mbom/inventree_mbom/css/mbom.css';
-    document.head.appendChild(link);
-  }
+  ensureMbomCss();
 
   target.setAttribute('data-mbom-panel', 'true');
   target.innerHTML = '<div style="padding:24px;text-align:center;color:#6b7280;"><span class="mbom-spinner"></span> Loading Manufacturing BOM &amp; Routings…</div>';
