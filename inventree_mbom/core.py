@@ -133,3 +133,4 @@ class ManufacturingBOMPlugin(
                 pass
 
         return panels
+

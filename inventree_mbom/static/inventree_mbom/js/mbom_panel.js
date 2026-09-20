@@ -16,7 +16,9 @@ function getCsrfToken() {
   return '';
 }
 
+// =========================================================
 // Helper: API Request
+// =========================================================
 async function mbomApi(path, opts = {}, pluginBase = '/plugin/inventree-mbom') {
   const url = path.startsWith('http') ? path : `${pluginBase}${path}`;
   const headers = {
@@ -45,8 +47,28 @@ async function mbomApi(path, opts = {}, pluginBase = '/plugin/inventree-mbom') {
   return data;
 }
 
-// Helper: Toast
+// =========================================================
+// Helper: Notification / Toast Feedback
+// =========================================================
 function showMbomToast(message, type = 'success', duration = 3000) {
+  // 1. Try InvenTree native Mantine notification dispatcher
+  try {
+    const mn = window.MantineNotifications?.notifications || window.MantineNotifications;
+    if (mn && typeof mn.show === 'function') {
+      const colorMap = { success: 'teal', error: 'red', info: 'blue', warning: 'yellow' };
+      mn.show({
+        title: type === 'error' ? 'Error' : type === 'warning' ? 'Notice' : 'Success',
+        message: message,
+        color: colorMap[type] || 'teal',
+        autoClose: duration,
+      });
+      return;
+    }
+  } catch (e) {
+    // Fallback to DOM toast
+  }
+
+  // 2. Fallback DOM Toast
   const existing = document.getElementById('mbom-toast');
   if (existing) existing.remove();
 
@@ -54,9 +76,9 @@ function showMbomToast(message, type = 'success', duration = 3000) {
   el.id = 'mbom-toast';
   el.className = `mbom-toast mbom-toast--${type}`;
   const icon = type === 'error' ? 'exclamation-circle' : type === 'info' ? 'info-circle' : type === 'warning' ? 'exclamation-triangle' : 'check-circle';
-  el.innerHTML = `<i class="fas fa-${icon}"></i> ${message}`;
+  el.innerHTML = `<i class="fas fa-${icon}"></i> <span>${message}</span>`;
   document.body.appendChild(el);
-  setTimeout(() => el.remove(), duration);
+  setTimeout(() => { if (el.parentNode) el.remove(); }, duration);
 }
 
 // =========================================================
@@ -203,7 +225,7 @@ class MbomPanel {
               <label for="mbom-quick-batch" style="font-size:0.8rem;opacity:0.75;">Batch:</label>
               <input type="number" id="mbom-quick-batch" value="${this.batchSize || 50}" min="1" style="width:60px;" class="mbom-input">
             </div>
-            <button class="mbom-btn mbom-btn--primary" onclick="window._mbomPanel && window._mbomPanel.quickApplyTemplate()">
+            <button class="mbom-btn mbom-btn--primary" data-action="quick-apply-template">
               <i class="fas fa-magic"></i>
               <span>Apply &amp; Generate Routing</span>
             </button>
@@ -211,7 +233,7 @@ class MbomPanel {
 
           <div class="mbom-quickstart-divider"><span>or</span></div>
 
-          <button class="mbom-btn mbom-btn--ghost" onclick="window._mbomPanel && window._mbomPanel.createEmptyRouting()">
+          <button class="mbom-btn mbom-btn--ghost" data-action="create-empty-routing">
             <i class="fas fa-plus"></i>
             <span>+ Create Empty Routing</span>
           </button>
@@ -262,6 +284,7 @@ class MbomPanel {
   _appendOpRow(tbody, op, isChild = false, parentId = null) {
     const row = document.createElement('tr');
     row.dataset.opId = op.pk;
+    row.setAttribute('draggable', 'true');
     if (isChild) {
       row.dataset.parentId = parentId;
       row.className = 'mbom-row--child';
@@ -307,7 +330,7 @@ class MbomPanel {
       <td style="text-align:right;">
         <input type="number" step="0.1" min="0" class="mbom-input" 
                value="${parseFloat(op.setup_time_minutes || 0).toFixed(2)}"
-               onchange="window._mbomPanel && window._mbomPanel.inlineUpdateOp(${op.pk}, 'setup_time_minutes', this.value)"
+               data-inline-field="setup_time_minutes"
                title="Click to edit setup time in minutes" 
                style="width:68px;padding:2px 4px;font-size:0.82rem;text-align:right;background:transparent;border:1px solid transparent;border-radius:4px;"
                onfocus="this.style.border='1px solid var(--bs-primary,#0d6efd)';this.style.background='var(--bs-body-bg,#fff)';"
@@ -316,7 +339,7 @@ class MbomPanel {
       <td style="text-align:right;">
         <input type="number" step="0.1" min="0" class="mbom-input" 
                value="${parseFloat(op.run_time_per_unit_minutes || 0).toFixed(2)}"
-               onchange="window._mbomPanel && window._mbomPanel.inlineUpdateOp(${op.pk}, 'run_time_per_unit_minutes', this.value)"
+               data-inline-field="run_time_per_unit_minutes"
                title="Click to edit cycle time per unit in minutes" 
                style="width:68px;padding:2px 4px;font-size:0.82rem;text-align:right;background:transparent;border:1px solid transparent;border-radius:4px;"
                onfocus="this.style.border='1px solid var(--bs-primary,#0d6efd)';this.style.background='var(--bs-body-bg,#fff)';"
@@ -325,13 +348,13 @@ class MbomPanel {
       <td class="mbom-cost-cell" style="text-align:right;">${cost} ${this.currency}</td>
       <td>
         <div class="mbom-actions">
-          ${!isChild ? `<button class="mbom-btn mbom-btn--icon mbom-btn--info" onclick="window._mbomPanel.showAddSubOpModal(${op.pk})" title="Add sub-step">
+          ${!isChild ? `<button class="mbom-btn mbom-btn--icon mbom-btn--info" data-action="add-sub-op" data-op-id="${op.pk}" title="Add sub-step">
             <i class="fas fa-level-down-alt"></i>
           </button>` : ''}
-          <button class="mbom-btn mbom-btn--icon mbom-btn--warning" onclick="window._mbomPanel.showEditOpModal(${op.pk})" title="Edit">
+          <button class="mbom-btn mbom-btn--icon mbom-btn--warning" data-action="edit-op" data-op-id="${op.pk}" title="Edit">
             <i class="fas fa-edit"></i>
           </button>
-          <button class="mbom-btn mbom-btn--icon mbom-btn--danger" onclick="window._mbomPanel.deleteOp(${op.pk})" title="Delete">
+          <button class="mbom-btn mbom-btn--icon mbom-btn--danger" data-action="delete-op" data-op-id="${op.pk}" title="Delete">
             <i class="fas fa-trash"></i>
           </button>
         </div>
@@ -422,8 +445,14 @@ class MbomPanel {
     if (!tbody) return;
 
     tbody.addEventListener('dragstart', (e) => {
+      // Don't drag if user is interacting with inputs, selects or buttons
+      if (e.target.closest('input, button, a, select')) {
+        e.preventDefault();
+        return;
+      }
       const row = e.target.closest('tr[data-op-id]');
       if (!row) return;
+
       this._dragSrc = row;
       row.classList.add('mbom-row--dragging');
       e.dataTransfer.effectAllowed = 'move';
@@ -434,6 +463,7 @@ class MbomPanel {
       document.querySelectorAll('.mbom-row--dragging, .mbom-row--drag-over').forEach(r => {
         r.classList.remove('mbom-row--dragging', 'mbom-row--drag-over');
       });
+      this._dragSrc = null;
     });
 
     tbody.addEventListener('dragover', (e) => {
@@ -446,34 +476,131 @@ class MbomPanel {
       }
     });
 
+    tbody.addEventListener('dragleave', (e) => {
+      const row = e.target.closest('tr[data-op-id]');
+      if (row && !row.contains(e.relatedTarget)) {
+        row.classList.remove('mbom-row--drag-over');
+      }
+    });
+
     tbody.addEventListener('drop', async (e) => {
       e.preventDefault();
-      const target = e.target.closest('tr[data-op-id]');
-      if (!target || target === this._dragSrc) return;
+      const targetRow = e.target.closest('tr[data-op-id]');
+      if (!targetRow || !this._dragSrc || targetRow === this._dragSrc) return;
 
-      const srcId = this._dragSrc.dataset.opId;
-      const tgtId = target.dataset.opId;
+      const srcRow = this._dragSrc;
+      const srcId = parseInt(srcRow.dataset.opId);
+      const isSrcChild = !!srcRow.dataset.parentId;
+      const isTgtChild = !!targetRow.dataset.parentId;
 
-      const srcOp = this._findOp(parseInt(srcId));
-      const tgtOp = this._findOp(parseInt(tgtId));
+      // Determine drop direction based on mouse Y position
+      const rect = targetRow.getBoundingClientRect();
+      const insertAfter = (e.clientY > rect.top + rect.height / 2);
 
-      if (srcOp && tgtOp) {
+      // Collect any child sub-rows of srcRow
+      const srcChildren = Array.from(tbody.querySelectorAll(`tr.mbom-row--child[data-parent-id="${srcId}"]`));
+
+      if (!isSrcChild) {
+        // Dragging a top-level PARENT operation
+        let effectiveTarget = targetRow;
+        if (isTgtChild) {
+          const tgtParentId = targetRow.dataset.parentId;
+          effectiveTarget = tbody.querySelector(`tr.mbom-row--parent[data-op-id="${tgtParentId}"]`) || targetRow;
+        }
+
+        if (insertAfter) {
+          const effTgtId = effectiveTarget.dataset.opId;
+          const tgtChildren = Array.from(tbody.querySelectorAll(`tr.mbom-row--child[data-parent-id="${effTgtId}"]`));
+          const lastRef = tgtChildren.length > 0 ? tgtChildren[tgtChildren.length - 1] : effectiveTarget;
+          lastRef.after(srcRow);
+        } else {
+          effectiveTarget.before(srcRow);
+        }
+
+        // Move all child rows directly beneath srcRow
+        let prevNode = srcRow;
+        srcChildren.forEach(c => {
+          prevNode.after(c);
+          prevNode = c;
+        });
+      } else {
+        // Dragging a CHILD sub-operation
+        if (insertAfter) {
+          targetRow.after(srcRow);
+        } else {
+          targetRow.before(srcRow);
+        }
+
+        // Find the parent operation row that sits above srcRow
+        let newParentId = null;
+        let prev = srcRow.previousElementSibling;
+        while (prev) {
+          if (prev.classList.contains('mbom-row--parent')) {
+            newParentId = prev.dataset.opId;
+            break;
+          }
+          prev = prev.previousElementSibling;
+        }
+        if (newParentId) {
+          srcRow.dataset.parentId = newParentId;
+        }
+      }
+
+      // Re-sequence all operations based on the new visual DOM order:
+      // Top-level operations become 10, 20, 30, 40...
+      // Sub-steps become <parentSeq>.1, <parentSeq>.2, <parentSeq>.3...
+      const parentRows = Array.from(tbody.querySelectorAll('tr.mbom-row--parent'));
+      const updates = [];
+
+      parentRows.forEach((pRow, pIdx) => {
+        const pId = parseInt(pRow.dataset.opId);
+        const pOp = this._findOp(pId);
+        const newParentSeq = ((pIdx + 1) * 10).toString();
+
+        if (pOp && pOp.sequence_number !== newParentSeq) {
+          updates.push({ id: pId, body: { sequence_number: newParentSeq } });
+          pOp.sequence_number = newParentSeq;
+        }
+
+        // Sub-steps of this parent
+        const cRows = Array.from(tbody.querySelectorAll(`tr.mbom-row--child[data-parent-id="${pId}"]`));
+        cRows.forEach((cRow, cIdx) => {
+          const cId = parseInt(cRow.dataset.opId);
+          const cOp = this._findOp(cId);
+          const newChildSeq = `${newParentSeq}.${cIdx + 1}`;
+          const currentParentId = cOp?.parent_operation;
+
+          const patchBody = {};
+          if (cOp && cOp.sequence_number !== newChildSeq) {
+            patchBody.sequence_number = newChildSeq;
+            cOp.sequence_number = newChildSeq;
+          }
+          if (cOp && currentParentId !== pId) {
+            patchBody.parent_operation = pId;
+            cOp.parent_operation = pId;
+          }
+
+          if (Object.keys(patchBody).length > 0) {
+            updates.push({ id: cId, body: patchBody });
+          }
+        });
+      });
+
+      if (updates.length > 0) {
         try {
-          const [srcSeq, tgtSeq] = [srcOp.sequence_number, tgtOp.sequence_number];
-          await this.api(`/operation/${srcId}/`, {
-            method: 'PATCH',
-            body: JSON.stringify({ sequence_number: tgtSeq }),
-          });
-          await this.api(`/operation/${tgtId}/`, {
-            method: 'PATCH',
-            body: JSON.stringify({ sequence_number: srcSeq }),
-          });
-          await this.loadOperations();
-          this.toast('Operations reordered');
+          await Promise.all(updates.map(u =>
+            this.api(`/operation/${u.id}/`, {
+              method: 'PATCH',
+              body: JSON.stringify(u.body),
+            })
+          ));
+          this.toast('Routing sequence updated');
         } catch (err) {
           this.toast(`Reorder failed: ${err.message}`, 'error');
         }
       }
+
+      await this.loadOperations();
     });
 
     tbody.addEventListener('click', (e) => {
@@ -498,7 +625,7 @@ class MbomPanel {
   }
 
   _populateParentSelect(ops) {
-    const sel = document.getElementById('mbom-f-parent');
+    const sel = document.getElementById('mbom-op-parent');
     if (!sel) return;
     sel.innerHTML = '<option value="">— None (Top-level Operation) —</option>';
     ops.forEach(op => {
@@ -514,14 +641,14 @@ class MbomPanel {
   // ---------------------------------------------------------
   showAddOpModal(parentOpId = null) {
     this._resetOpForm();
-    const title = document.getElementById('mbom-op-modal-title');
-    if (title) title.textContent = parentOpId ? 'Add Sub-Operation' : 'Add Operation';
+    const title = document.getElementById('mbom-op-dialog-title');
+    if (title) title.innerHTML = `<i class="fas fa-${parentOpId ? 'level-down-alt' : 'plus'}"></i> ${parentOpId ? 'Add Sub-Operation' : 'Add Operation'}`;
 
-    const parentSel = document.getElementById('mbom-f-parent');
+    const parentSel = document.getElementById('mbom-op-parent');
     if (parentSel && parentOpId) parentSel.value = parentOpId;
 
     const backdrop = document.getElementById('mbom-op-backdrop');
-    if (backdrop) backdrop.classList.add('is-open');
+    if (backdrop) backdrop.classList.add('is-open', 'open');
   }
 
   showAddSubOpModal(parentOpId) {
@@ -529,22 +656,22 @@ class MbomPanel {
   }
 
   showEditOpModal(pk) {
-    const op = this._findOp(pk);
+    const op = this._findOp(parseInt(pk));
     if (!op) return;
 
     this._resetOpForm();
-    const title = document.getElementById('mbom-op-modal-title');
-    if (title) title.textContent = `Edit Operation: ${op.name}`;
+    const title = document.getElementById('mbom-op-dialog-title');
+    if (title) title.innerHTML = `<i class="fas fa-edit"></i> Edit Operation: ${op.name}`;
 
-    const idEl = document.getElementById('mbom-f-op-id');
-    const seqEl = document.getElementById('mbom-f-seq');
-    const nameEl = document.getElementById('mbom-f-name');
-    const descEl = document.getElementById('mbom-f-desc');
-    const parentSel = document.getElementById('mbom-f-parent');
-    const laborSel = document.getElementById('mbom-f-labor');
-    const machSel = document.getElementById('mbom-f-machine');
-    const setupEl = document.getElementById('mbom-f-setup');
-    const cycleEl = document.getElementById('mbom-f-cycle');
+    const idEl     = document.getElementById('mbom-op-id');
+    const seqEl    = document.getElementById('mbom-op-seq');
+    const nameEl   = document.getElementById('mbom-op-name');
+    const descEl   = document.getElementById('mbom-op-desc');
+    const parentSel = document.getElementById('mbom-op-parent');
+    const laborSel = document.getElementById('mbom-op-labor');
+    const machSel  = document.getElementById('mbom-op-machine');
+    const setupEl  = document.getElementById('mbom-op-setup');
+    const cycleEl  = document.getElementById('mbom-op-cycle');
 
     if (idEl) idEl.value = op.pk;
     if (seqEl) seqEl.value = op.sequence_number;
@@ -557,35 +684,50 @@ class MbomPanel {
     if (cycleEl) cycleEl.value = op.run_time_per_unit_minutes;
 
     const backdrop = document.getElementById('mbom-op-backdrop');
-    if (backdrop) backdrop.classList.add('is-open');
+    if (backdrop) backdrop.classList.add('is-open', 'open');
   }
 
   showApplyTemplateDialog() {
     const backdrop = document.getElementById('mbom-tmpl-backdrop');
-    if (backdrop) backdrop.classList.add('is-open');
+    if (backdrop) backdrop.classList.add('is-open', 'open');
   }
 
   _closeDialogs() {
-    document.querySelectorAll('.mbom-backdrop').forEach(b => b.classList.remove('is-open'));
+    document.querySelectorAll('.mbom-backdrop').forEach(b => b.classList.remove('is-open', 'open'));
   }
 
   _resetOpForm() {
-    const f = document.getElementById('mbom-op-form');
-    if (f) f.reset();
-    const idEl = document.getElementById('mbom-f-op-id');
+    const idEl     = document.getElementById('mbom-op-id');
+    const seqEl    = document.getElementById('mbom-op-seq');
+    const nameEl   = document.getElementById('mbom-op-name');
+    const descEl   = document.getElementById('mbom-op-desc');
+    const parentSel = document.getElementById('mbom-op-parent');
+    const laborSel = document.getElementById('mbom-op-labor');
+    const machSel  = document.getElementById('mbom-op-machine');
+    const setupEl  = document.getElementById('mbom-op-setup');
+    const cycleEl  = document.getElementById('mbom-op-cycle');
+
     if (idEl) idEl.value = '';
+    if (seqEl) seqEl.value = '';
+    if (nameEl) nameEl.value = '';
+    if (descEl) descEl.value = '';
+    if (parentSel) parentSel.value = '';
+    if (laborSel) laborSel.value = '';
+    if (machSel) machSel.value = '';
+    if (setupEl) setupEl.value = '0';
+    if (cycleEl) cycleEl.value = '0';
   }
 
   async saveOp() {
-    const idEl     = document.getElementById('mbom-f-op-id');
-    const seqEl    = document.getElementById('mbom-f-seq');
-    const nameEl   = document.getElementById('mbom-f-name');
-    const descEl   = document.getElementById('mbom-f-desc');
-    const parentEl = document.getElementById('mbom-f-parent');
-    const laborEl  = document.getElementById('mbom-f-labor');
-    const machEl   = document.getElementById('mbom-f-machine');
-    const setupEl  = document.getElementById('mbom-f-setup');
-    const cycleEl  = document.getElementById('mbom-f-cycle');
+    const idEl     = document.getElementById('mbom-op-id');
+    const seqEl    = document.getElementById('mbom-op-seq');
+    const nameEl   = document.getElementById('mbom-op-name');
+    const descEl   = document.getElementById('mbom-op-desc');
+    const parentEl = document.getElementById('mbom-op-parent');
+    const laborEl  = document.getElementById('mbom-op-labor');
+    const machEl   = document.getElementById('mbom-op-machine');
+    const setupEl  = document.getElementById('mbom-op-setup');
+    const cycleEl  = document.getElementById('mbom-op-cycle');
 
     if (!nameEl || !nameEl.value.trim()) {
       this.toast('Operation name is required', 'error');
@@ -654,9 +796,9 @@ class MbomPanel {
   }
 
   async applyTemplate() {
-    const sel = document.getElementById('mbom-t-select');
-    const batchInput = document.getElementById('mbom-t-batch');
-    const overwriteBox = document.getElementById('mbom-t-overwrite');
+    const sel = document.getElementById('mbom-tmpl-select');
+    const batchInput = document.getElementById('mbom-tmpl-batch');
+    const overwriteBox = document.getElementById('mbom-tmpl-overwrite');
 
     const tmplId = sel ? sel.value : null;
     if (!tmplId) {
@@ -668,7 +810,7 @@ class MbomPanel {
       part_id:     this.partId,
       template_id: parseInt(tmplId),
       batch_size:  batchInput ? (parseInt(batchInput.value) || 1) : 1,
-      overwrite:   overwriteBox ? overwriteBox.checked : false,
+      overwrite:   overwriteBox ? (overwriteBox.value === 'true' || overwriteBox.checked) : false,
     };
 
     try {
@@ -735,10 +877,11 @@ class MbomPanel {
 // =========================================================
 export async function renderMbomSettingsPanel(target, context) {
   if (!target) return;
+
   target.setAttribute('data-mbom-settings', 'true');
 
   target.innerHTML = `
-    <div class="mbom-settings-container">
+    <div class="mbom-settings-container" id="mbom-settings-root">
       <div class="mbom-settings-header">
         <div>
           <h3 style="margin:0 0 4px 0;font-size:1.15rem;font-weight:700;display:flex;align-items:center;gap:8px;">
@@ -749,19 +892,19 @@ export async function renderMbomSettingsPanel(target, context) {
             Central management for labor rates, machine centers, and reusable process routing templates.
           </p>
         </div>
-        <button class="mbom-btn mbom-btn--ghost" id="mbom-settings-refresh-btn" title="Refresh data">
+        <button class="mbom-btn mbom-btn--ghost" data-settings-action="refresh" title="Refresh data">
           <i class="fas fa-sync-alt"></i> <span>Refresh</span>
         </button>
       </div>
 
       <div class="mbom-settings-tabs">
-        <button class="mbom-tab-btn active" data-tab="labor">
+        <button class="mbom-tab-btn active" data-settings-tab="labor">
           <i class="fas fa-user-hard-hat"></i> Labor Rates (<span id="mbom-cnt-labor">…</span>)
         </button>
-        <button class="mbom-tab-btn" data-tab="machine">
+        <button class="mbom-tab-btn" data-settings-tab="machine">
           <i class="fas fa-cog"></i> Machine Centers (<span id="mbom-cnt-machine">…</span>)
         </button>
-        <button class="mbom-tab-btn" data-tab="templates">
+        <button class="mbom-tab-btn" data-settings-tab="templates">
           <i class="fas fa-magic"></i> Process Templates (<span id="mbom-cnt-tmpl">…</span>)
         </button>
       </div>
@@ -770,7 +913,7 @@ export async function renderMbomSettingsPanel(target, context) {
       <div class="mbom-settings-section active" id="mbom-sec-labor">
         <div class="mbom-settings-toolbar">
           <div style="font-size:0.85rem;opacity:0.75;">Labor tariff classes used to compute assembly cycle &amp; setup costs.</div>
-          <button class="mbom-btn mbom-btn--success" id="mbom-add-labor-btn">
+          <button class="mbom-btn mbom-btn--success" data-settings-action="add-labor">
             <i class="fas fa-plus"></i> <span>Add Labor Rate</span>
           </button>
         </div>
@@ -799,7 +942,7 @@ export async function renderMbomSettingsPanel(target, context) {
       <div class="mbom-settings-section" id="mbom-sec-machine">
         <div class="mbom-settings-toolbar">
           <div style="font-size:0.85rem;opacity:0.75;">Machine centers, equipment rates, and CO₂ emission factors.</div>
-          <button class="mbom-btn mbom-btn--success" id="mbom-add-machine-btn">
+          <button class="mbom-btn mbom-btn--success" data-settings-action="add-machine">
             <i class="fas fa-plus"></i> <span>Add Machine Center</span>
           </button>
         </div>
@@ -828,7 +971,7 @@ export async function renderMbomSettingsPanel(target, context) {
       <div class="mbom-settings-section" id="mbom-sec-templates">
         <div class="mbom-settings-toolbar">
           <div style="font-size:0.85rem;opacity:0.75;">Reusable manufacturing process templates with parent &amp; child operations.</div>
-          <button class="mbom-btn mbom-btn--primary" id="mbom-add-template-btn">
+          <button class="mbom-btn mbom-btn--primary" data-settings-action="add-template">
             <i class="fas fa-plus"></i> <span>New Process Template</span>
           </button>
         </div>
@@ -842,12 +985,12 @@ export async function renderMbomSettingsPanel(target, context) {
         <div class="mbom-dialog" style="max-width:550px;">
           <div class="mbom-dialog__header">
             <h6 class="mbom-dialog__title" id="mbom-sm-title">Edit</h6>
-            <button class="mbom-dialog__close" id="mbom-sm-close"><i class="fas fa-times"></i></button>
+            <button class="mbom-dialog__close" data-settings-action="close-modal"><i class="fas fa-times"></i></button>
           </div>
           <div class="mbom-dialog__body" id="mbom-sm-body"></div>
           <div class="mbom-dialog__footer">
-            <button class="mbom-btn mbom-btn--ghost" id="mbom-sm-cancel">Cancel</button>
-            <button class="mbom-btn mbom-btn--primary" id="mbom-sm-save">Save Changes</button>
+            <button class="mbom-btn mbom-btn--ghost" data-settings-action="close-modal">Cancel</button>
+            <button class="mbom-btn mbom-btn--primary" id="mbom-sm-save" data-settings-action="save-modal">Save Changes</button>
           </div>
         </div>
       </div>
@@ -859,38 +1002,16 @@ export async function renderMbomSettingsPanel(target, context) {
   let machineCenters = [];
   let templates = [];
 
-  // Tab switching
-  const tabs = target.querySelectorAll('.mbom-tab-btn');
-  tabs.forEach(btn => {
-    btn.addEventListener('click', () => {
-      tabs.forEach(t => t.classList.remove('active'));
-      target.querySelectorAll('.mbom-settings-section').forEach(s => s.classList.remove('active'));
-      btn.classList.add('active');
-      const sec = target.querySelector(`#mbom-sec-${btn.dataset.tab}`);
-      if (sec) sec.classList.add('active');
-    });
-  });
-
-  // Modal helpers
   const modalBackdrop = target.querySelector('#mbom-settings-modal-backdrop');
   const modalTitle = target.querySelector('#mbom-sm-title');
   const modalBody = target.querySelector('#mbom-sm-body');
-  const modalSave = target.querySelector('#mbom-sm-save');
-  const modalClose = target.querySelector('#mbom-sm-close');
-  const modalCancel = target.querySelector('#mbom-sm-cancel');
-
   let currentSaveHandler = null;
 
   function closeModal() {
-    modalBackdrop.classList.remove('is-open');
+    modalBackdrop.classList.remove('is-open', 'open');
     modalBody.innerHTML = '';
     currentSaveHandler = null;
   }
-  modalClose.addEventListener('click', closeModal);
-  modalCancel.addEventListener('click', closeModal);
-  modalSave.addEventListener('click', () => {
-    if (currentSaveHandler) currentSaveHandler();
-  });
 
   // Load All
   async function loadAll() {
@@ -942,19 +1063,12 @@ export async function renderMbomSettingsPanel(target, context) {
         </td>
         <td>
           <div class="mbom-actions">
-            <button class="mbom-btn mbom-btn--icon mbom-btn--warning" data-edit-labor="${r.pk}" title="Edit"><i class="fas fa-edit"></i></button>
-            <button class="mbom-btn mbom-btn--icon mbom-btn--danger" data-del-labor="${r.pk}" title="Delete"><i class="fas fa-trash"></i></button>
+            <button class="mbom-btn mbom-btn--icon mbom-btn--warning" data-settings-action="edit-labor" data-pk="${r.pk}" title="Edit"><i class="fas fa-edit"></i></button>
+            <button class="mbom-btn mbom-btn--icon mbom-btn--danger" data-settings-action="delete-labor" data-pk="${r.pk}" title="Delete"><i class="fas fa-trash"></i></button>
           </div>
         </td>
       </tr>
     `).join('');
-
-    tbody.querySelectorAll('[data-edit-labor]').forEach(b => {
-      b.addEventListener('click', () => openLaborModal(laborRates.find(r => r.pk == b.dataset.editLabor)));
-    });
-    tbody.querySelectorAll('[data-del-labor]').forEach(b => {
-      b.addEventListener('click', () => deleteLaborRate(b.dataset.delLabor));
-    });
   }
 
   function openLaborModal(r = null) {
@@ -1015,7 +1129,7 @@ export async function renderMbomSettingsPanel(target, context) {
       }
     };
 
-    modalBackdrop.classList.add('is-open');
+    modalBackdrop.classList.add('is-open', 'open');
   }
 
   async function deleteLaborRate(pk) {
@@ -1052,19 +1166,12 @@ export async function renderMbomSettingsPanel(target, context) {
         </td>
         <td>
           <div class="mbom-actions">
-            <button class="mbom-btn mbom-btn--icon mbom-btn--warning" data-edit-mac="${m.pk}" title="Edit"><i class="fas fa-edit"></i></button>
-            <button class="mbom-btn mbom-btn--icon mbom-btn--danger" data-del-mac="${m.pk}" title="Delete"><i class="fas fa-trash"></i></button>
+            <button class="mbom-btn mbom-btn--icon mbom-btn--warning" data-settings-action="edit-machine" data-pk="${m.pk}" title="Edit"><i class="fas fa-edit"></i></button>
+            <button class="mbom-btn mbom-btn--icon mbom-btn--danger" data-settings-action="delete-machine" data-pk="${m.pk}" title="Delete"><i class="fas fa-trash"></i></button>
           </div>
         </td>
       </tr>
     `).join('');
-
-    tbody.querySelectorAll('[data-edit-mac]').forEach(b => {
-      b.addEventListener('click', () => openMachineModal(machineCenters.find(m => m.pk == b.dataset.editMac)));
-    });
-    tbody.querySelectorAll('[data-del-mac]').forEach(b => {
-      b.addEventListener('click', () => deleteMachineCenter(b.dataset.delMac));
-    });
   }
 
   function openMachineModal(m = null) {
@@ -1126,7 +1233,7 @@ export async function renderMbomSettingsPanel(target, context) {
       }
     };
 
-    modalBackdrop.classList.add('is-open');
+    modalBackdrop.classList.add('is-open', 'open');
   }
 
   async function deleteMachineCenter(pk) {
@@ -1165,9 +1272,9 @@ export async function renderMbomSettingsPanel(target, context) {
               ${t.description ? `<div style="font-size:0.8rem;opacity:0.7;margin-top:2px;">${t.description}</div>` : ''}
             </div>
             <div class="mbom-actions">
-              <button class="mbom-btn mbom-btn--success" data-add-step="${t.pk}"><i class="fas fa-plus"></i> Add Step</button>
-              <button class="mbom-btn mbom-btn--warning" data-edit-tmpl="${t.pk}"><i class="fas fa-edit"></i> Edit</button>
-              <button class="mbom-btn mbom-btn--danger" data-del-tmpl="${t.pk}"><i class="fas fa-trash"></i> Delete</button>
+              <button class="mbom-btn mbom-btn--success" data-settings-action="add-step" data-pk="${t.pk}"><i class="fas fa-plus"></i> Add Step</button>
+              <button class="mbom-btn mbom-btn--warning" data-settings-action="edit-template" data-pk="${t.pk}"><i class="fas fa-edit"></i> Edit</button>
+              <button class="mbom-btn mbom-btn--danger" data-settings-action="delete-template" data-pk="${t.pk}"><i class="fas fa-trash"></i> Delete</button>
             </div>
           </div>
           <div style="padding:10px 14px;">
@@ -1176,27 +1283,6 @@ export async function renderMbomSettingsPanel(target, context) {
         </div>
       `;
     }).join('');
-
-    container.querySelectorAll('[data-add-step]').forEach(b => {
-      b.addEventListener('click', () => openStepModal(templates.find(t => t.pk == b.dataset.addStep), null));
-    });
-    container.querySelectorAll('[data-edit-tmpl]').forEach(b => {
-      b.addEventListener('click', () => openTemplateModal(templates.find(t => t.pk == b.dataset.editTmpl)));
-    });
-    container.querySelectorAll('[data-del-tmpl]').forEach(b => {
-      b.addEventListener('click', () => deleteTemplate(b.dataset.delTmpl));
-    });
-
-    container.querySelectorAll('[data-edit-step]').forEach(b => {
-      const tmplId = b.dataset.tmplId;
-      const stepId = b.dataset.editStep;
-      const tmpl = templates.find(t => t.pk == tmplId);
-      const step = findStepInTemplate(tmpl, stepId);
-      b.addEventListener('click', () => openStepModal(tmpl, step));
-    });
-    container.querySelectorAll('[data-del-step]').forEach(b => {
-      b.addEventListener('click', () => deleteStep(b.dataset.delStep));
-    });
   }
 
   function findStepInTemplate(tmpl, stepId) {
@@ -1261,8 +1347,8 @@ export async function renderMbomSettingsPanel(target, context) {
         <td style="text-align:right;">${parseFloat(s.run_time_per_unit_minutes || 0).toFixed(2)}</td>
         <td>
           <div class="mbom-actions">
-            <button class="mbom-btn mbom-btn--icon mbom-btn--warning" data-tmpl-id="${tmpl.pk}" data-edit-step="${s.pk}" title="Edit"><i class="fas fa-edit"></i></button>
-            <button class="mbom-btn mbom-btn--icon mbom-btn--danger" data-del-step="${s.pk}" title="Delete"><i class="fas fa-trash"></i></button>
+            <button class="mbom-btn mbom-btn--icon mbom-btn--warning" data-settings-action="edit-step" data-tmpl-id="${tmpl.pk}" data-step-id="${s.pk}" title="Edit"><i class="fas fa-edit"></i></button>
+            <button class="mbom-btn mbom-btn--icon mbom-btn--danger" data-settings-action="delete-step" data-step-id="${s.pk}" title="Delete"><i class="fas fa-trash"></i></button>
           </div>
         </td>
       </tr>
@@ -1314,7 +1400,7 @@ export async function renderMbomSettingsPanel(target, context) {
       }
     };
 
-    modalBackdrop.classList.add('is-open');
+    modalBackdrop.classList.add('is-open', 'open');
   }
 
   async function deleteTemplate(pk) {
@@ -1431,7 +1517,7 @@ export async function renderMbomSettingsPanel(target, context) {
       }
     };
 
-    modalBackdrop.classList.add('is-open');
+    modalBackdrop.classList.add('is-open', 'open');
   }
 
   async function deleteStep(pk) {
@@ -1445,11 +1531,55 @@ export async function renderMbomSettingsPanel(target, context) {
     }
   }
 
-  // Buttons listeners
-  target.querySelector('#mbom-settings-refresh-btn').addEventListener('click', loadAll);
-  target.querySelector('#mbom-add-labor-btn').addEventListener('click', () => openLaborModal(null));
-  target.querySelector('#mbom-add-machine-btn').addEventListener('click', () => openMachineModal(null));
-  target.querySelector('#mbom-add-template-btn').addEventListener('click', () => openTemplateModal(null));
+  // Named click handler (stored for cleanup on re-render)
+  const settingsClickHandler = (e) => {
+    const tabBtn = e.target.closest('[data-settings-tab]');
+    if (tabBtn) {
+      e.stopPropagation();
+      e.preventDefault();
+      target.querySelectorAll('.mbom-tab-btn').forEach(t => t.classList.remove('active'));
+      target.querySelectorAll('.mbom-settings-section').forEach(s => s.classList.remove('active'));
+      tabBtn.classList.add('active');
+      const sec = target.querySelector(`#mbom-sec-${tabBtn.dataset.settingsTab}`);
+      if (sec) sec.classList.add('active');
+      return;
+    }
+
+    const actionEl = e.target.closest('[data-settings-action]');
+    if (!actionEl) return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    const act = actionEl.dataset.settingsAction;
+    const pk = actionEl.dataset.pk;
+
+    if (act === 'refresh') loadAll();
+    else if (act === 'add-labor') openLaborModal(null);
+    else if (act === 'edit-labor') openLaborModal(laborRates.find(r => r.pk == pk));
+    else if (act === 'delete-labor') deleteLaborRate(pk);
+    else if (act === 'add-machine') openMachineModal(null);
+    else if (act === 'edit-machine') openMachineModal(machineCenters.find(m => m.pk == pk));
+    else if (act === 'delete-machine') deleteMachineCenter(pk);
+    else if (act === 'add-template') openTemplateModal(null);
+    else if (act === 'edit-template') openTemplateModal(templates.find(t => t.pk == pk));
+    else if (act === 'delete-template') deleteTemplate(pk);
+    else if (act === 'add-step') openStepModal(templates.find(t => t.pk == pk), null);
+    else if (act === 'edit-step') {
+      const tmpl = templates.find(t => t.pk == actionEl.dataset.tmplId);
+      openStepModal(tmpl, findStepInTemplate(tmpl, actionEl.dataset.stepId));
+    }
+    else if (act === 'delete-step') deleteStep(actionEl.dataset.stepId);
+    else if (act === 'close-modal') closeModal();
+    else if (act === 'save-modal') {
+      if (currentSaveHandler) currentSaveHandler();
+    }
+  };
+
+  // Register click listener on the internal settings container, NOT on external target
+  const settingsRoot = target.querySelector('#mbom-settings-root');
+  if (settingsRoot) {
+    settingsRoot.addEventListener('click', settingsClickHandler);
+  }
 
   // Initial load
   await loadAll();
@@ -1469,67 +1599,80 @@ export function initPricingObserver() {
   const origPush = history.pushState;
   history.pushState = function() {
     origPush.apply(this, arguments);
-    checkAndInjectPricing();
+    syncPricingMount();
   };
   const origReplace = history.replaceState;
   history.replaceState = function() {
     origReplace.apply(this, arguments);
-    checkAndInjectPricing();
+    syncPricingMount();
   };
-  window.addEventListener('popstate', checkAndInjectPricing);
+  window.addEventListener('popstate', syncPricingMount);
 
   // MutationObserver for SPA DOM updates
   const observer = new MutationObserver(() => {
-    checkAndInjectPricing();
+    syncPricingMount();
   });
   observer.observe(document.body, { childList: true, subtree: true });
 
-  // Initial check
-  checkAndInjectPricing();
+  // Initial sync
+  syncPricingMount();
+}
+
+function syncPricingMount() {
+  const match = window.location.pathname.match(/\/web\/part\/(\d+)\/pricing(\/|$)/);
+  if (!match) {
+    // Clean up if we navigated away from /pricing
+    const existing = document.getElementById('mbom-pricing-accordion');
+    if (existing) existing.remove();
+    return;
+  }
+
+  const partId = match[1];
+  checkAndInjectPricing(partId);
 }
 
 let isInjectingPricing = false;
 
-async function checkAndInjectPricing() {
-  const match = window.location.pathname.match(/\/web\/part\/(\d+)\/pricing/);
-  if (!match) return;
-
-  const partId = match[1];
+async function checkAndInjectPricing(partId) {
   if (document.getElementById('mbom-pricing-accordion')) return;
   if (isInjectingPricing) return;
-  isInjectingPricing = true;
 
+  // Verify target is available in DOM before fetching
+  const targetAnchor = findBomPricingAnchor();
+  if (!targetAnchor) return;
+
+  isInjectingPricing = true;
   try {
     const data = await mbomApi(`/cost-summary/${partId}/`);
     if (!data || !data.has_routing) return;
 
     if (document.getElementById('mbom-pricing-accordion')) return;
 
-    // Find the pricing container or card
-    const container = findPricingMountTarget();
-    if (!container) return;
+    const curAnchor = findBomPricingAnchor();
+    if (!curAnchor) return;
 
     const cur = data.currency || 'EUR';
     const accordion = document.createElement('div');
     accordion.id = 'mbom-pricing-accordion';
-    accordion.className = 'mbom-pricing-accordion mantine-Paper-root';
-    accordion.style.cssText = 'margin:16px 0;border:1px solid var(--bs-border-color,#dee2e6);border-radius:8px;overflow:hidden;background:var(--bs-body-bg,#fff);';
+    accordion.className = 'mantine-Accordion-item mbom-pricing-accordion';
+    accordion.setAttribute('data-value', 'mbom');
+    accordion.style.cssText = 'margin:12px 0;border:1px solid var(--bs-border-color,#dee2e6);border-radius:8px;overflow:hidden;background:var(--bs-body-bg,#fff);box-shadow:0 1px 3px rgba(0,0,0,0.05);';
 
     accordion.innerHTML = `
-      <div class="mbom-accordion-header" id="mbom-acc-toggle" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bs-secondary-bg,#f8f9fa);cursor:pointer;user-select:none;">
-        <div style="display:flex;align-items:center;gap:8px;">
+      <div class="mantine-Accordion-control mbom-accordion-header" id="mbom-pricing-toggle" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bs-secondary-bg,#f8f9fa);cursor:pointer;user-select:none;">
+        <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-size:1.1rem;">⚙️</span>
-          <span style="font-weight:700;font-size:0.95rem;">mBOM Pricing (Manufacturing Operations)</span>
-          <span class="mbom-badge mbom-badge--active" style="background:rgba(25,135,84,0.15);color:#198754;font-weight:600;padding:2px 8px;border-radius:12px;font-size:0.75rem;">
+          <span style="font-weight:700;font-size:1.0rem;">mBOM Pricing</span>
+          <span class="mbom-badge mbom-badge--active" style="background:rgba(25,135,84,0.15);color:#198754;font-weight:600;padding:2px 9px;border-radius:12px;font-size:0.78rem;">
             +${parseFloat(data.per_unit_manufacturing_cost || 0).toFixed(4)} ${cur} / unit
           </span>
         </div>
         <div style="display:flex;align-items:center;gap:12px;">
-          <span style="font-size:0.8rem;opacity:0.7;">Batch: ${data.batch_size}</span>
-          <span class="mbom-accordion-chevron" style="font-size:0.8rem;transition:transform 0.2s ease;">▼</span>
+          <span style="font-size:0.8rem;opacity:0.65;">Batch: ${data.batch_size}</span>
+          <span class="mbom-accordion-chevron" id="mbom-pricing-chevron" style="font-size:0.82rem;transition:transform 0.2s ease;">▼</span>
         </div>
       </div>
-      <div class="mbom-accordion-body" style="padding:16px;">
+      <div class="mantine-Accordion-panel mbom-accordion-body" id="mbom-pricing-body" style="padding:16px;border-top:1px solid var(--bs-border-color,#dee2e6);">
         <div class="mbom-kpi-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px;">
           <div class="mbom-kpi">
             <div class="mbom-kpi__label">Labor Cost</div>
@@ -1554,18 +1697,18 @@ async function checkAndInjectPricing() {
           <div class="mbom-kpi">
             <div class="mbom-kpi__label">Per-Unit Mfg</div>
             <div class="mbom-kpi__val" style="color:#198754;">+${parseFloat(data.per_unit_manufacturing_cost || 0).toFixed(4)} ${cur}</div>
-            <div class="mbom-kpi__sub">Added to Overall Pricing</div>
+            <div class="mbom-kpi__sub">Rolled into Overall Pricing</div>
           </div>
         </div>
 
         ${data.operations && data.operations.length > 0 ? `
           <div style="margin-top:12px;">
-            <div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;opacity:0.8;">Operations Breakdown</div>
-            <div style="overflow-x:auto;">
+            <div style="font-size:0.84rem;font-weight:600;margin-bottom:6px;opacity:0.85;">Operations Breakdown</div>
+            <div class="mbom-table-wrapper" style="overflow-x:auto;">
               <table class="mbom-table" style="width:100%;font-size:0.82rem;">
                 <thead>
                   <tr>
-                    <th>Seq</th>
+                    <th style="width:60px;">Seq</th>
                     <th>Operation</th>
                     <th>Labor Class</th>
                     <th>Machine Center</th>
@@ -1587,7 +1730,7 @@ async function checkAndInjectPricing() {
                     </tr>
                     ${(op.sub_operations || []).map(sub => `
                       <tr style="opacity:0.85;">
-                        <td style="padding-left:20px;">↳ <span class="mbom-seq-badge" style="font-size:0.75rem;">${sub.sequence_number}</span></td>
+                        <td style="padding-left:18px;">↳ <span class="mbom-seq-badge" style="font-size:0.75rem;">${sub.sequence_number}</span></td>
                         <td>${sub.name}</td>
                         <td>${sub.labor_rate_name}</td>
                         <td>${sub.machine_name}</td>
@@ -1605,23 +1748,24 @@ async function checkAndInjectPricing() {
 
         <div class="mbom-rollup-note" style="margin-top:12px;font-size:0.78rem;opacity:0.75;display:flex;align-items:center;gap:6px;">
           <span>ℹ️</span>
-          <span>mBOM manufacturing cost is rolled into the <strong>Overall Pricing</strong> card above: Overall Cost = Material (eBOM) + Manufacturing (mBOM).</span>
+          <span>mBOM manufacturing cost is rolled into the <strong>Overall Pricing</strong> card: Overall Cost = Material (eBOM) + Manufacturing (mBOM).</span>
         </div>
       </div>
     `;
 
-    const toggle = accordion.querySelector('#mbom-acc-toggle');
-    const chevron = accordion.querySelector('.mbom-accordion-chevron');
-    const body = accordion.querySelector('.mbom-accordion-body');
+    const toggle = accordion.querySelector('#mbom-pricing-toggle');
+    const chevron = accordion.querySelector('#mbom-pricing-chevron');
+    const body = accordion.querySelector('#mbom-pricing-body');
     let open = true;
-    toggle.addEventListener('click', () => {
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
       open = !open;
       body.style.display = open ? 'block' : 'none';
       chevron.style.transform = open ? 'rotate(0deg)' : 'rotate(-90deg)';
     });
 
-    // Insert into container
-    container.parentNode.insertBefore(accordion, container.nextSibling || container);
+    // Mount strictly directly after the BOM Pricing card
+    curAnchor.insertAdjacentElement('afterend', accordion);
   } catch (err) {
     console.warn('[mBOM] pricing injection notice:', err.message);
   } finally {
@@ -1629,18 +1773,54 @@ async function checkAndInjectPricing() {
   }
 }
 
-function findPricingMountTarget() {
-  // Look for BOM Pricing card or Overall Pricing card in the pricing panel
-  const allCards = Array.from(document.querySelectorAll('.mantine-Paper-root, [role="tabpanel"] > div, .mantine-Tabs-panel > div'));
-  for (const card of allCards) {
-    const text = card.textContent || '';
-    if (text.includes('BOM Pricing') || text.includes('Overall Pricing')) {
-      return card;
-    }
+/**
+ * Locate the BOM Pricing card/item inside InvenTree's Pricing tab.
+ */
+function findBomPricingAnchor() {
+  // 1. Check for native Mantine Accordion item with id="bom"
+  const bomEl = document.getElementById('bom');
+  if (bomEl && isElementInPricingTab(bomEl)) return bomEl;
+
+  // 2. Check for Accordion item with value="bom" or data-value="bom"
+  const bomVal = document.querySelector('.mantine-Accordion-item[data-value="bom"], .mantine-Accordion-item[value="bom"]');
+  if (bomVal && isElementInPricingTab(bomVal)) return bomVal;
+
+  // 3. Check for Accordion control button ending with -control-bom or data-accordion-control="bom"
+  const bomCtrl = document.querySelector('button[id$="-control-bom"], [data-accordion-control="bom"]');
+  if (bomCtrl) {
+    const item = bomCtrl.closest('.mantine-Accordion-item');
+    if (item && isElementInPricingTab(item)) return item;
   }
-  const tabpanel = document.querySelector('[role="tabpanel"], .mantine-Tabs-panel');
-  if (tabpanel) return tabpanel.firstElementChild || tabpanel;
+
+  // 4. Find any control or text specifically containing "BOM Pricing"
+  const allControls = Array.from(document.querySelectorAll('.mantine-Accordion-control, button, .mantine-Text-root, strong'));
+  const bomBtn = allControls.find(el => el.textContent && el.textContent.trim().toLowerCase().includes('bom pricing'));
+  if (bomBtn) {
+    const item = bomBtn.closest('.mantine-Accordion-item, .mantine-Paper-root, .mantine-Card-root');
+    if (item && isElementInPricingTab(item)) return item;
+  }
+
+  // 5. Fallback inside active tab panel: after overview or first card
+  const activeTabPanel = document.querySelector('[role="tabpanel"]:not([hidden]), .mantine-Tabs-panel:not([style*="none"])');
+  if (activeTabPanel) {
+    const overviewEl = activeTabPanel.querySelector('#overview, [data-value="overview"], button[id$="-control-overview"]');
+    if (overviewEl) {
+      const item = overviewEl.closest('.mantine-Accordion-item') || overviewEl;
+      if (item) return item;
+    }
+    const firstCard = activeTabPanel.querySelector('.mantine-Accordion-item, .mantine-Paper-root');
+    if (firstCard) return firstCard;
+  }
+
   return null;
+}
+
+function isElementInPricingTab(el) {
+  if (!el) return false;
+  // Ensure the element is not inside a hidden tab
+  const hiddenParent = el.closest('[hidden], [style*="display: none"]');
+  if (hiddenParent) return false;
+  return true;
 }
 
 // =========================================================
@@ -1687,24 +1867,21 @@ export async function renderMbomPanel(target, context) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const html = await res.text();
 
-    const temp = document.createElement('div');
-    temp.innerHTML = html;
-    target.innerHTML = '';
-    while (temp.firstChild) {
-      target.appendChild(temp.firstChild);
-    }
+    // Create an internal root container for this panel instance
+    const root = document.createElement('div');
+    root.className = 'mbom-panel-wrapper';
+    root.innerHTML = html;
 
     // Config extraction
     let config = null;
-    const scripts = target.querySelectorAll('script');
-    scripts.forEach(s => {
+    const configScript = root.querySelector('#mbom-config-data');
+    if (configScript) {
       try {
-        (new Function(s.textContent))();
-        if (window.MBOM_CONFIG) config = window.MBOM_CONFIG;
+        config = JSON.parse(configScript.textContent);
       } catch (e) {
-        console.warn('[mBOM] Script evaluation notice:', e);
+        console.warn('[mBOM] JSON config parse notice:', e);
       }
-    });
+    }
 
     if (!config) {
       config = {
@@ -1723,9 +1900,50 @@ export async function renderMbomPanel(target, context) {
     const panel = new MbomPanel(config);
     window._mbomPanel = panel;
     window.MBOM_PANEL = panel;
+
+    // Event Delegation attached strictly to internal root, NOT external target
+    root.addEventListener('click', (e) => {
+      const actionEl = e.target.closest('[data-action]');
+      if (actionEl) {
+        e.stopPropagation();
+        e.preventDefault();
+
+        const act = actionEl.dataset.action;
+        const opRow = actionEl.closest('[data-op-id]');
+        const opId = opRow ? opRow.dataset.opId : (actionEl.dataset.opId || actionEl.dataset.pk);
+
+        if (act === 'open-add-op') panel.showAddOpModal();
+        else if (act === 'add-sub-op') panel.showAddSubOpModal(opId);
+        else if (act === 'edit-op') panel.showEditOpModal(opId);
+        else if (act === 'delete-op') panel.deleteOp(opId);
+        else if (act === 'open-template-dialog') panel.showApplyTemplateDialog();
+        else if (act === 'quick-apply-template') panel.quickApplyTemplate();
+        else if (act === 'create-empty-routing') panel.createEmptyRouting();
+        else if (act === 'close-dialog') panel._closeDialogs();
+        else if (act === 'save-op') panel.saveOp();
+        else if (act === 'apply-template') panel.applyTemplate();
+      } else if (e.target.classList && e.target.classList.contains('mbom-backdrop')) {
+        panel._closeDialogs();
+      }
+    });
+
+    root.addEventListener('change', (e) => {
+      if (e.target.id === 'mbom-batch-input') {
+        panel.updateBatchSize(e.target.value);
+      } else if (e.target.matches('[data-inline-field]')) {
+        const opRow = e.target.closest('[data-op-id]');
+        if (opRow) {
+          panel.inlineUpdateOp(opRow.dataset.opId, e.target.dataset.inlineField, e.target.value);
+        }
+      }
+    });
+
+    // Mount inside target (atomically replacing previous instance and cleaning up listeners)
+    target.replaceChildren(root);
+
     await panel.init();
 
-    // Start pricing observer
+    // Start pricing observer (idempotent)
     initPricingObserver();
   } catch (err) {
     target.innerHTML = `<div style="padding:16px;color:#dc2626;background:#fee2e2;border-radius:8px;">

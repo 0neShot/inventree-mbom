@@ -19,8 +19,7 @@
       <label for="mbom-batch-input" style="margin:0;font-size:0.78rem;">Batch:</label>
       <input type="number" id="mbom-batch-input"
              value="{{ routing.standard_batch_size|default:1 }}"
-             min="1" style="width:64px;"
-             onchange="window._mbomPanel && window._mbomPanel.updateBatchSize()">
+             min="1" style="width:64px;">
     </div>
 
     <div class="mbom-toolbar-actions">
@@ -31,13 +30,13 @@
         <span>{% trans "Rates &amp; Tariffs" %} ↗</span>
       </a>
       <button class="mbom-btn mbom-btn--ghost"
-              onclick="window._mbomPanel && window._mbomPanel.showApplyTemplateDialog()"
+              data-action="open-template-dialog"
               title="Seed routing from a process template">
         <i class="fas fa-magic"></i>
         <span>{% trans "Apply Template" %}</span>
       </button>
       <button class="mbom-btn mbom-btn--success"
-              onclick="window._mbomPanel && window._mbomPanel.showAddOpModal()"
+              data-action="open-add-op"
               title="Add a new operation manually">
         <i class="fas fa-plus"></i>
         <span>{% trans "Add Operation" %}</span>
@@ -112,7 +111,7 @@
             <label for="mbom-quick-batch" style="font-size:0.8rem;opacity:0.75;">{% trans "Batch" %}:</label>
             <input type="number" id="mbom-quick-batch" value="50" min="1" style="width:60px;" class="mbom-input">
           </div>
-          <button class="mbom-btn mbom-btn--primary" onclick="window._mbomPanel && window._mbomPanel.quickApplyTemplate()">
+          <button class="mbom-btn mbom-btn--primary" data-action="quick-apply-template">
             <i class="fas fa-magic"></i>
             <span>{% trans "Apply &amp; Generate Routing" %}</span>
           </button>
@@ -120,7 +119,7 @@
 
         <div class="mbom-quickstart-divider"><span>{% trans "or" %}</span></div>
 
-        <button class="mbom-btn mbom-btn--ghost" onclick="window._mbomPanel && window._mbomPanel.createEmptyRouting()">
+        <button class="mbom-btn mbom-btn--ghost" data-action="create-empty-routing">
           <i class="fas fa-plus"></i>
           <span>{% trans "+ Create Empty Routing" %}</span>
         </button>
@@ -144,7 +143,7 @@
         <i class="fas fa-magic"></i>
         {% trans "Apply Process Template" %}
       </h6>
-      <button class="mbom-dialog__close" onclick="window._mbomPanel && window._mbomPanel._closeDialogs()">
+      <button class="mbom-dialog__close" data-action="close-dialog">
         <i class="fas fa-times"></i>
       </button>
     </div>
@@ -177,12 +176,10 @@
       </div>
     </div>
     <div class="mbom-dialog__footer">
-      <button class="mbom-btn mbom-btn--ghost"
-              onclick="window._mbomPanel && window._mbomPanel._closeDialogs()">
+      <button class="mbom-btn mbom-btn--ghost" data-action="close-dialog">
         {% trans "Cancel" %}
       </button>
-      <button class="mbom-btn mbom-btn--primary" id="mbom-tmpl-apply-btn"
-              onclick="window._mbomPanel && window._mbomPanel.applyTemplate()">
+      <button class="mbom-btn mbom-btn--primary" id="mbom-tmpl-apply-btn" data-action="apply-template">
         <i class="fas fa-magic"></i> {% trans "Apply" %}
       </button>
     </div>
@@ -197,7 +194,7 @@
       <h6 class="mbom-dialog__title" id="mbom-op-dialog-title">
         <i class="fas fa-plus"></i> {% trans "Add Operation" %}
       </h6>
-      <button class="mbom-dialog__close" onclick="window._mbomPanel && window._mbomPanel._closeDialogs()">
+      <button class="mbom-dialog__close" data-action="close-dialog">
         <i class="fas fa-times"></i>
       </button>
     </div>
@@ -279,12 +276,10 @@
       </div>
     </div>
     <div class="mbom-dialog__footer">
-      <button class="mbom-btn mbom-btn--ghost"
-              onclick="window._mbomPanel && window._mbomPanel._closeDialogs()">
+      <button class="mbom-btn mbom-btn--ghost" data-action="close-dialog">
         {% trans "Cancel" %}
       </button>
-      <button class="mbom-btn mbom-btn--success" id="mbom-op-save-btn"
-              onclick="window._mbomPanel && window._mbomPanel.saveOp()">
+      <button class="mbom-btn mbom-btn--success" id="mbom-op-save-btn" data-action="save-op">
         <i class="fas fa-save"></i> {% trans "Save" %}
       </button>
     </div>

@@ -478,6 +478,28 @@ class RoutingOperation(models.Model):
 
     is_active = models.BooleanField(default=True, verbose_name=_("Active"))
 
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        old_seq = None
+        if not is_new and not self.parent_operation_id:
+            try:
+                old_seq = RoutingOperation.objects.filter(pk=self.pk).values_list("sequence_number", flat=True).first()
+            except Exception:
+                pass
+
+        super().save(*args, **kwargs)
+
+        # If a top-level operation's sequence changed, cascade prefix to its child sub-operations
+        if old_seq and str(old_seq).strip() != str(self.sequence_number).strip() and not self.parent_operation_id:
+            parent_seq = str(self.sequence_number).strip()
+            for sub in self.sub_operations.all():
+                curr_seq = str(sub.sequence_number).strip()
+                step_idx = curr_seq.split(".")[-1]
+                new_sub_seq = f"{parent_seq}.{step_idx}"
+                if curr_seq != new_sub_seq:
+                    sub.sequence_number = new_sub_seq
+                    sub.save(update_fields=["sequence_number"])
+
     def __str__(self):
         return f"[{self.sequence_number}] {self.name} ({self.routing.part})"
 

@@ -362,7 +362,12 @@
   animation: mbom-fade-in 0.15s ease;
 }
 
-.mbom-backdrop.open { display: flex; align-items: center; justify-content: center; }
+.mbom-backdrop.open,
+.mbom-backdrop.is-open {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
 
 .mbom-dialog {
   background: var(--bs-body-bg, #fff);
