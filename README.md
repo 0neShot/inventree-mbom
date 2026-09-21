@@ -17,6 +17,7 @@
 - **Setup Time (fixed/batch)** + **Run/Cycle Time (per unit)** tracked separately
 - **CO₂ emission factor** tracking per machine center
 - **Full pricing integration**: manufacturing costs bridge into InvenTree's native `PartPricing` system
+<img width=80% height=80% alt="grafik" src="https://github.com/user-attachments/assets/b6abd213-604c-44b7-9c04-36740a2acd2e" />
 
 ---
 
@@ -32,6 +33,7 @@
 ### Process Templates
 
 Create reusable templates (e.g. "SMT Assembly Standard") with hierarchical steps. Apply them to any assembly with one click.
+<img width=80% height=80% alt="grafik" src="https://github.com/user-attachments/assets/b3ede2a2-b035-4d7a-ae7d-4abaccdbec72" />
 
 ### Part Routing (mBOM)
 
@@ -57,6 +59,7 @@ Total Assembly Cost = eBOM Material Cost + mBOM Labor Cost + mBOM Machine Cost
 ### Pricing Bridge
 
 When a `LaborRate` or `MachineCenter` hourly rate is updated, Django `post_save` signals automatically call `PartPricing.schedule_for_update()` on all affected assemblies — **no InvenTree core modifications required**.
+<img width=50% height=50% alt="grafik" src="https://github.com/user-attachments/assets/bcbeb5af-5454-4374-81ce-b48354539c9e" />
 
 ---
 
