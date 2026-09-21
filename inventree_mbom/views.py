@@ -151,6 +151,12 @@ class PartRoutingList(MBomPermissionMixin, ListCreateAPI):
     def create(self, request, *args, **kwargs):
         part_id = request.data.get("part")
         if part_id:
+            part = inventree_part.Part.objects.filter(pk=part_id).first()
+            if part and part.locked:
+                return Response(
+                    {"error": "Part is locked. Routing creation is prohibited."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             existing = PartRouting.objects.filter(part_id=part_id).first()
             if existing:
                 serializer = self.get_serializer(existing)
@@ -158,6 +164,10 @@ class PartRoutingList(MBomPermissionMixin, ListCreateAPI):
         return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
+        part = serializer.validated_data.get("part")
+        if part and part.locked:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError("Part is locked. Routing creation is prohibited.")
         instance = serializer.save()
         from .pricing import MbomPricingService
         MbomPricingService.sync_part_pricing(instance.part, instance.standard_batch_size)
@@ -169,9 +179,21 @@ class PartRoutingDetail(MBomPermissionMixin, RetrieveUpdateDestroyAPI):
     queryset = PartRouting.objects.all()
 
     def perform_update(self, serializer):
+        if serializer.instance.part.locked:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError("Part is locked. Routing modifications are prohibited.")
         instance = serializer.save()
         from .pricing import MbomPricingService
         MbomPricingService.sync_part_pricing(instance.part, instance.standard_batch_size)
+
+    def perform_destroy(self, instance):
+        if instance.part.locked:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError("Part is locked. Routing modifications are prohibited.")
+        part = instance.part
+        instance.delete()
+        from .pricing import MbomPricingService
+        MbomPricingService.sync_part_pricing(part)
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +217,10 @@ class RoutingOperationList(MBomPermissionMixin, ListCreateAPI):
         return qs
 
     def perform_create(self, serializer):
+        routing = serializer.validated_data.get("routing")
+        if routing and routing.part.locked:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError("Part is locked. Routing operations cannot be modified.")
         instance = serializer.save()
         from .pricing import MbomPricingService
         MbomPricingService.sync_part_pricing(instance.routing.part)
@@ -206,11 +232,17 @@ class RoutingOperationDetail(MBomPermissionMixin, RetrieveUpdateDestroyAPI):
     queryset = RoutingOperation.objects.all()
 
     def perform_update(self, serializer):
+        if serializer.instance.routing.part.locked:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError("Part is locked. Routing operations cannot be modified.")
         instance = serializer.save()
         from .pricing import MbomPricingService
         MbomPricingService.sync_part_pricing(instance.routing.part)
 
     def perform_destroy(self, instance):
+        if instance.routing.part.locked:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError("Part is locked. Routing operations cannot be modified.")
         part = instance.routing.part
         instance.delete()
         from .pricing import MbomPricingService
@@ -251,6 +283,12 @@ class ApplyTemplateView(APIView):
             return Response(
                 {"error": f"Part {part_id} not found"},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if part.locked:
+            return Response(
+                {"error": "Part is locked. Routing modifications are prohibited."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not part.assembly:

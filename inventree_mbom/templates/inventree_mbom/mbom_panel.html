@@ -11,6 +11,11 @@
           #{{ routing.pk }}
         </span>
       {% endif %}
+      {% if part.locked %}
+        <span class="mbom-badge mbom-badge--locked" title="{% trans 'Part is locked. Changes prohibited.' %}">
+          <i class="fas fa-lock"></i> {% trans "Locked" %}
+        </span>
+      {% endif %}
     </h5>
 
     <!-- Batch size control -->
@@ -19,7 +24,8 @@
       <label for="mbom-batch-input" style="margin:0;font-size:0.78rem;">Batch:</label>
       <input type="number" id="mbom-batch-input"
              value="{{ routing.standard_batch_size|default:1 }}"
-             min="1" style="width:64px;">
+             min="1"
+             {% if part.locked %}disabled title="{% trans 'Part is locked' %}" style="width:64px;opacity:0.6;cursor:not-allowed;"{% else %}style="width:64px;"{% endif %}>
     </div>
 
     <div class="mbom-toolbar-actions">
@@ -29,6 +35,7 @@
         <i class="fas fa-sliders-h"></i>
         <span>{% trans "Rates &amp; Tariffs" %} ↗</span>
       </a>
+      {% if not part.locked %}
       <button class="mbom-btn mbom-btn--ghost"
               data-action="open-template-dialog"
               title="Seed routing from a process template">
@@ -41,8 +48,16 @@
         <i class="fas fa-plus"></i>
         <span>{% trans "Add Operation" %}</span>
       </button>
+      {% endif %}
     </div>
   </div>
+
+  {% if part.locked %}
+  <div class="mbom-locked-banner">
+    <i class="fas fa-lock"></i>
+    <span>{% trans "This part is locked. Manufacturing routing operations, timing, and batch configurations cannot be modified." %}</span>
+  </div>
+  {% endif %}
 
   <!-- ===================== Cost Summary Cards ===================== -->
   <div class="mbom-summary-grid">
@@ -94,37 +109,45 @@
   <!-- ===================== Operations Table / Empty State ===================== -->
   <div id="mbom-ops-container">
     {% if not routing %}
-    <div class="mbom-empty mbom-quickstart-hero">
-      <div class="mbom-quickstart-icon">⚙️</div>
-      <h4 class="mbom-quickstart-title">{% trans "Manufacturing Routing (mBOM)" %}</h4>
-      <p class="mbom-quickstart-sub">{% trans "This assembly has no routing defined yet. Select a process template to generate operations instantly, or start with a custom routing." %}</p>
-      
-      <div class="mbom-quickstart-actions">
-        <div class="mbom-quickstart-template-bar">
-          <select id="mbom-quick-template-select" class="mbom-select">
-            <option value="">— {% trans "Select Process Template…" %} —</option>
-            {% for t in templates %}
-              <option value="{{ t.pk }}" {% if forloop.first %}selected{% endif %}>{{ t.name }}</option>
-            {% endfor %}
-          </select>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <label for="mbom-quick-batch" style="font-size:0.8rem;opacity:0.75;">{% trans "Batch" %}:</label>
-            <input type="number" id="mbom-quick-batch" value="50" min="1" style="width:60px;" class="mbom-input">
+      {% if part.locked %}
+      <div class="mbom-empty mbom-quickstart-hero">
+        <div class="mbom-quickstart-icon">🔒</div>
+        <h4 class="mbom-quickstart-title">{% trans "Manufacturing Routing (mBOM)" %}</h4>
+        <p class="mbom-quickstart-sub">{% trans "This assembly has no routing defined, and editing is disabled because the part is locked." %}</p>
+      </div>
+      {% else %}
+      <div class="mbom-empty mbom-quickstart-hero">
+        <div class="mbom-quickstart-icon">⚙️</div>
+        <h4 class="mbom-quickstart-title">{% trans "Manufacturing Routing (mBOM)" %}</h4>
+        <p class="mbom-quickstart-sub">{% trans "This assembly has no routing defined yet. Select a process template to generate operations instantly, or start with a custom routing." %}</p>
+        
+        <div class="mbom-quickstart-actions">
+          <div class="mbom-quickstart-template-bar">
+            <select id="mbom-quick-template-select" class="mbom-select">
+              <option value="">— {% trans "Select Process Template…" %} —</option>
+              {% for t in templates %}
+                <option value="{{ t.pk }}" {% if forloop.first %}selected{% endif %}>{{ t.name }}</option>
+              {% endfor %}
+            </select>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <label for="mbom-quick-batch" style="font-size:0.8rem;opacity:0.75;">{% trans "Batch" %}:</label>
+              <input type="number" id="mbom-quick-batch" value="50" min="1" style="width:60px;" class="mbom-input">
+            </div>
+            <button class="mbom-btn mbom-btn--primary" data-action="quick-apply-template">
+              <i class="fas fa-magic"></i>
+              <span>{% trans "Apply &amp; Generate Routing" %}</span>
+            </button>
           </div>
-          <button class="mbom-btn mbom-btn--primary" data-action="quick-apply-template">
-            <i class="fas fa-magic"></i>
-            <span>{% trans "Apply &amp; Generate Routing" %}</span>
+
+          <div class="mbom-quickstart-divider"><span>{% trans "or" %}</span></div>
+
+          <button class="mbom-btn mbom-btn--ghost" data-action="create-empty-routing">
+            <i class="fas fa-plus"></i>
+            <span>{% trans "+ Create Empty Routing" %}</span>
           </button>
         </div>
-
-        <div class="mbom-quickstart-divider"><span>{% trans "or" %}</span></div>
-
-        <button class="mbom-btn mbom-btn--ghost" data-action="create-empty-routing">
-          <i class="fas fa-plus"></i>
-          <span>{% trans "+ Create Empty Routing" %}</span>
-        </button>
       </div>
-    </div>
+      {% endif %}
     {% else %}
     <div style="text-align:center;padding:32px 16px;color:#6b7280;">
       <span class="mbom-spinner"></span>&nbsp;{% trans "Loading routing…" %}
@@ -290,6 +313,7 @@
 <script type="application/json" id="mbom-config-data">
 {
   "partId": {{ part.pk }},
+  "isLocked": {% if part.locked %}true{% else %}false{% endif %},
   "routingId": {% if routing %}{{ routing.pk }}{% else %}null{% endif %},
   "pluginBase": "/plugin/inventree-mbom",
   "currency": "{{ currency|default:'EUR' }}",

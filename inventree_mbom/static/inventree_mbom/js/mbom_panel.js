@@ -109,6 +109,7 @@ function showMbomToast(message, type = 'success', duration = 3000) {
 class MbomPanel {
   constructor(config) {
     this.partId       = config.partId;
+    this.isLocked     = !!config.isLocked;
     this.routingId    = config.routingId;
     this.pluginBase   = config.pluginBase || '/plugin/inventree-mbom';
     this.currency     = config.currency || 'EUR';
@@ -227,6 +228,16 @@ class MbomPanel {
     const container = document.getElementById('mbom-ops-container');
     if (!container) return;
 
+    if (this.isLocked) {
+      container.innerHTML = `
+        <div class="mbom-empty mbom-quickstart-hero">
+          <div class="mbom-quickstart-icon">🔒</div>
+          <h4 class="mbom-quickstart-title">Manufacturing Routing (mBOM)</h4>
+          <p class="mbom-quickstart-sub">This assembly has no routing defined, and editing is disabled because the part is <strong>locked</strong>.</p>
+        </div>`;
+      return;
+    }
+
     const templateOptions = (this.templates || []).map(t =>
       `<option value="${t.pk || t.id}">${t.name}</option>`
     ).join('');
@@ -281,15 +292,20 @@ class MbomPanel {
                 <th style="text-align:right;">Setup (min)</th>
                 <th style="text-align:right;">Cycle (min)</th>
                 <th style="text-align:right;">Unit Cost</th>
-                <th class="col-actions">Actions</th>
+                <th class="col-actions">${this.isLocked ? 'Status' : 'Actions'}</th>
               </tr>
             </thead>
             <tbody id="mbom-tbody">
               <tr>
                 <td colspan="9" style="text-align:center;padding:36px 16px;color:var(--bs-secondary,#6c757d);">
-                  <div style="font-size:1.6rem;margin-bottom:8px;">📋</div>
+                  <div style="font-size:1.6rem;margin-bottom:8px;">${this.isLocked ? '🔒' : '📋'}</div>
                   <div style="font-weight:600;font-size:0.95rem;margin-bottom:4px;">No operations defined yet</div>
-                  <div style="font-size:0.82rem;margin-bottom:14px;opacity:0.8;">This routing is empty. Add your first operation or apply a process template.</div>
+                  <div style="font-size:0.82rem;margin-bottom:14px;opacity:0.8;">
+                    ${this.isLocked
+                      ? 'This assembly is locked. Creating or modifying operations is prohibited.'
+                      : 'This routing is empty. Add your first operation or apply a process template.'}
+                  </div>
+                  ${!this.isLocked ? `
                   <div style="display:flex;justify-content:center;gap:10px;">
                     <button class="mbom-btn mbom-btn--success" data-action="open-add-op">
                       <i class="fas fa-plus"></i> Add First Operation
@@ -297,7 +313,7 @@ class MbomPanel {
                     <button class="mbom-btn mbom-btn--ghost" data-action="open-template-dialog">
                       <i class="fas fa-magic"></i> Apply Template
                     </button>
-                  </div>
+                  </div>` : ''}
                 </td>
               </tr>
             </tbody>
@@ -319,7 +335,7 @@ class MbomPanel {
               <th style="text-align:right;">Setup (min)</th>
               <th style="text-align:right;">Cycle (min)</th>
               <th style="text-align:right;">Unit Cost</th>
-              <th class="col-actions">Actions</th>
+              <th class="col-actions">${this.isLocked ? 'Status' : 'Actions'}</th>
             </tr>
           </thead>
           <tbody id="mbom-tbody"></tbody>
@@ -340,7 +356,7 @@ class MbomPanel {
   _appendOpRow(tbody, op, isChild = false, parentId = null) {
     const row = document.createElement('tr');
     row.dataset.opId = op.pk;
-    row.setAttribute('draggable', 'true');
+    row.setAttribute('draggable', this.isLocked ? 'false' : 'true');
     if (isChild) {
       row.dataset.parentId = parentId;
       row.className = 'mbom-row--child';
@@ -374,8 +390,54 @@ class MbomPanel {
 
     const cost = parseFloat(op.per_unit_cost || 0).toFixed(4);
 
+    const dragCol = this.isLocked
+      ? `<td class="col-drag" style="opacity:0.25;"><i class="fas fa-lock" style="font-size:0.75rem;" title="Locked"></i></td>`
+      : `<td class="col-drag"><i class="fas fa-grip-vertical"></i></td>`;
+
+    const setupInput = this.isLocked
+      ? `<input type="number" step="1" min="0" class="mbom-input" 
+               value="${parseFloat(op.setup_time_minutes || 0)}"
+               disabled title="Part is locked"
+               style="width:68px;padding:2px 4px;font-size:0.82rem;text-align:right;background:transparent;border:1px solid transparent;border-radius:4px;cursor:not-allowed;opacity:0.75;">`
+      : `<input type="number" step="1" min="0" class="mbom-input" 
+               value="${parseFloat(op.setup_time_minutes || 0)}"
+               data-inline-field="setup_time_minutes"
+               title="Click to edit setup time in minutes" 
+               style="width:68px;padding:2px 4px;font-size:0.82rem;text-align:right;background:transparent;border:1px solid transparent;border-radius:4px;"
+               onfocus="this.style.border='1px solid var(--bs-primary,#0d6efd)';this.style.background='var(--bs-body-bg,#fff)';"
+               onblur="this.style.border='1px solid transparent';this.style.background='transparent';">`;
+
+    const cycleInput = this.isLocked
+      ? `<input type="number" step="1" min="0" class="mbom-input" 
+               value="${parseFloat(op.run_time_per_unit_minutes || 0)}"
+               disabled title="Part is locked"
+               style="width:68px;padding:2px 4px;font-size:0.82rem;text-align:right;background:transparent;border:1px solid transparent;border-radius:4px;cursor:not-allowed;opacity:0.75;">`
+      : `<input type="number" step="1" min="0" class="mbom-input" 
+               value="${parseFloat(op.run_time_per_unit_minutes || 0)}"
+               data-inline-field="run_time_per_unit_minutes"
+               title="Click to edit cycle time per unit in minutes" 
+               style="width:68px;padding:2px 4px;font-size:0.82rem;text-align:right;background:transparent;border:1px solid transparent;border-radius:4px;"
+               onfocus="this.style.border='1px solid var(--bs-primary,#0d6efd)';this.style.background='var(--bs-body-bg,#fff)';"
+               onblur="this.style.border='1px solid transparent';this.style.background='transparent';">`;
+
+    const actionsCell = this.isLocked
+      ? `<td><span class="mbom-badge mbom-badge--locked" style="font-size:0.72rem;padding:2px 6px;"><i class="fas fa-lock"></i> Locked</span></td>`
+      : `<td>
+          <div class="mbom-actions">
+            ${!isChild ? `<button class="mbom-btn mbom-btn--icon mbom-btn--info" data-action="add-sub-op" data-op-id="${op.pk}" title="Add sub-step">
+              <i class="fas fa-level-down-alt"></i>
+            </button>` : ''}
+            <button class="mbom-btn mbom-btn--icon mbom-btn--warning" data-action="edit-op" data-op-id="${op.pk}" title="Edit">
+              <i class="fas fa-edit"></i>
+            </button>
+            <button class="mbom-btn mbom-btn--icon mbom-btn--danger" data-action="delete-op" data-op-id="${op.pk}" title="Delete">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+        </td>`;
+
     row.innerHTML = `
-      <td class="col-drag"><i class="fas fa-grip-vertical"></i></td>
+      ${dragCol}
       <td>${indent}${seqBadge}${toggleBtn}</td>
       <td>
         <strong>${op.name}</strong>
@@ -383,38 +445,10 @@ class MbomPanel {
       </td>
       <td class="col-hide-sm">${laborChip}</td>
       <td class="col-hide-sm">${machineChip}</td>
-      <td style="text-align:right;">
-        <input type="number" step="1" min="0" class="mbom-input" 
-               value="${parseFloat(op.setup_time_minutes || 0)}"
-               data-inline-field="setup_time_minutes"
-               title="Click to edit setup time in minutes" 
-               style="width:68px;padding:2px 4px;font-size:0.82rem;text-align:right;background:transparent;border:1px solid transparent;border-radius:4px;"
-               onfocus="this.style.border='1px solid var(--bs-primary,#0d6efd)';this.style.background='var(--bs-body-bg,#fff)';"
-               onblur="this.style.border='1px solid transparent';this.style.background='transparent';">
-      </td>
-      <td style="text-align:right;">
-        <input type="number" step="1" min="0" class="mbom-input" 
-               value="${parseFloat(op.run_time_per_unit_minutes || 0)}"
-               data-inline-field="run_time_per_unit_minutes"
-               title="Click to edit cycle time per unit in minutes" 
-               style="width:68px;padding:2px 4px;font-size:0.82rem;text-align:right;background:transparent;border:1px solid transparent;border-radius:4px;"
-               onfocus="this.style.border='1px solid var(--bs-primary,#0d6efd)';this.style.background='var(--bs-body-bg,#fff)';"
-               onblur="this.style.border='1px solid transparent';this.style.background='transparent';">
-      </td>
+      <td style="text-align:right;">${setupInput}</td>
+      <td style="text-align:right;">${cycleInput}</td>
       <td class="mbom-cost-cell" style="text-align:right;">${cost} ${this.currency}</td>
-      <td>
-        <div class="mbom-actions">
-          ${!isChild ? `<button class="mbom-btn mbom-btn--icon mbom-btn--info" data-action="add-sub-op" data-op-id="${op.pk}" title="Add sub-step">
-            <i class="fas fa-level-down-alt"></i>
-          </button>` : ''}
-          <button class="mbom-btn mbom-btn--icon mbom-btn--warning" data-action="edit-op" data-op-id="${op.pk}" title="Edit">
-            <i class="fas fa-edit"></i>
-          </button>
-          <button class="mbom-btn mbom-btn--icon mbom-btn--danger" data-action="delete-op" data-op-id="${op.pk}" title="Delete">
-            <i class="fas fa-trash"></i>
-          </button>
-        </div>
-      </td>`;
+      ${actionsCell}`;
 
     tbody.appendChild(row);
   }
@@ -429,6 +463,10 @@ class MbomPanel {
   // Inline Editing & 1-Click Template Actions
   // ---------------------------------------------------------
   async inlineUpdateOp(opId, field, val) {
+    if (this.isLocked) {
+      this.toast('Part is locked. Changes are prohibited.', 'warning');
+      return;
+    }
     try {
       await this.api(`/operation/${opId}/`, {
         method: 'PATCH',
@@ -443,6 +481,10 @@ class MbomPanel {
   }
 
   async quickApplyTemplate() {
+    if (this.isLocked) {
+      this.toast('Part is locked. Changes are prohibited.', 'warning');
+      return;
+    }
     const sel = document.getElementById('mbom-quick-template-select');
     const batchInput = document.getElementById('mbom-quick-batch');
     const tmplId = sel ? sel.value : '';
@@ -475,6 +517,10 @@ class MbomPanel {
   }
 
   async createEmptyRouting() {
+    if (this.isLocked) {
+      this.toast('Part is locked. Changes are prohibited.', 'warning');
+      return;
+    }
     try {
       const res = await this.api('/routing/', {
         method: 'POST',
@@ -511,6 +557,7 @@ class MbomPanel {
   // Drag-and-drop reordering
   // ---------------------------------------------------------
   _initDragDrop() {
+    if (this.isLocked) return;
     const tbody = document.getElementById('mbom-tbody');
     if (!tbody) return;
 
@@ -710,6 +757,10 @@ class MbomPanel {
   // Modals & Dialogs
   // ---------------------------------------------------------
   showAddOpModal(parentOpId = null) {
+    if (this.isLocked) {
+      this.toast('Part is locked. Changes are prohibited.', 'warning');
+      return;
+    }
     this._resetOpForm();
     const title = document.getElementById('mbom-op-dialog-title');
     if (title) title.innerHTML = `<i class="fas fa-${parentOpId ? 'level-down-alt' : 'plus'}"></i> ${parentOpId ? 'Add Sub-Operation' : 'Add Operation'}`;
@@ -726,6 +777,10 @@ class MbomPanel {
   }
 
   showEditOpModal(pk) {
+    if (this.isLocked) {
+      this.toast('Part is locked. Changes are prohibited.', 'warning');
+      return;
+    }
     const op = this._findOp(parseInt(pk));
     if (!op) return;
 
@@ -758,6 +813,10 @@ class MbomPanel {
   }
 
   showApplyTemplateDialog() {
+    if (this.isLocked) {
+      this.toast('Part is locked. Changes are prohibited.', 'warning');
+      return;
+    }
     const backdrop = document.getElementById('mbom-tmpl-backdrop');
     if (backdrop) backdrop.classList.add('is-open', 'open');
   }
@@ -789,6 +848,10 @@ class MbomPanel {
   }
 
   async saveOp() {
+    if (this.isLocked) {
+      this.toast('Part is locked. Changes are prohibited.', 'error');
+      return;
+    }
     const idEl     = document.getElementById('mbom-op-id');
     const seqEl    = document.getElementById('mbom-op-seq');
     const nameEl   = document.getElementById('mbom-op-name');
@@ -854,6 +917,10 @@ class MbomPanel {
   }
 
   async deleteOp(pk) {
+    if (this.isLocked) {
+      this.toast('Part is locked. Changes are prohibited.', 'error');
+      return;
+    }
     if (!confirm('Are you sure you want to delete this operation? Any sub-operations will also be removed.')) return;
     try {
       await this.api(`/operation/${pk}/`, { method: 'DELETE' });
@@ -866,6 +933,10 @@ class MbomPanel {
   }
 
   async applyTemplate() {
+    if (this.isLocked) {
+      this.toast('Part is locked. Changes are prohibited.', 'error');
+      return;
+    }
     const sel = document.getElementById('mbom-tmpl-select');
     const batchInput = document.getElementById('mbom-tmpl-batch');
     const overwriteBox = document.getElementById('mbom-tmpl-overwrite');
@@ -900,6 +971,10 @@ class MbomPanel {
   }
 
   async updateBatchSize(newBatch) {
+    if (this.isLocked) {
+      this.toast('Part is locked. Changes are prohibited.', 'warning');
+      return;
+    }
     const b = parseInt(newBatch);
     if (!b || b < 1) return;
     this.batchSize = b;
@@ -1963,7 +2038,14 @@ export async function renderMbomPanel(target, context) {
         laborRates: [],
         machineCenters: [],
         templates: [],
+        isLocked: false,
       };
+    }
+
+    // Override or detect isLocked from InvenTree context if provided
+    const ctxLocked = context?.instance?.locked ?? context?.locked;
+    if (ctxLocked !== undefined) {
+      config.isLocked = !!ctxLocked;
     }
 
     window.MBOM_CONFIG = config;
@@ -1979,6 +2061,16 @@ export async function renderMbomPanel(target, context) {
         e.preventDefault();
 
         const act = actionEl.dataset.action;
+        if (act === 'close-dialog') {
+          panel._closeDialogs();
+          return;
+        }
+
+        if (panel.isLocked) {
+          panel.toast('Part is locked. Changes are prohibited.', 'warning');
+          return;
+        }
+
         const opRow = actionEl.closest('[data-op-id]');
         const opId = opRow ? opRow.dataset.opId : (actionEl.dataset.opId || actionEl.dataset.pk);
 
@@ -1989,7 +2081,6 @@ export async function renderMbomPanel(target, context) {
         else if (act === 'open-template-dialog') panel.showApplyTemplateDialog();
         else if (act === 'quick-apply-template') panel.quickApplyTemplate();
         else if (act === 'create-empty-routing') panel.createEmptyRouting();
-        else if (act === 'close-dialog') panel._closeDialogs();
         else if (act === 'save-op') panel.saveOp();
         else if (act === 'apply-template') panel.applyTemplate();
       } else if (e.target.classList && e.target.classList.contains('mbom-backdrop')) {
@@ -1998,6 +2089,7 @@ export async function renderMbomPanel(target, context) {
     });
 
     root.addEventListener('change', (e) => {
+      if (panel.isLocked) return;
       if (e.target.id === 'mbom-batch-input') {
         panel.updateBatchSize(e.target.value);
       } else if (e.target.matches('[data-inline-field]')) {

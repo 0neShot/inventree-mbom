@@ -835,6 +835,25 @@
 }
 .mbom-badge--active   { background: rgba(25,135,84,0.12); color: var(--bs-success, #198754); }
 .mbom-badge--inactive { background: rgba(108,117,125,0.12); color: var(--bs-secondary, #6c757d); }
+.mbom-badge--locked   { background: rgba(220,53,69,0.12); color: var(--bs-danger, #dc3545); border: 1px solid rgba(220,53,69,0.25); }
+
+/* Locked Assembly Banner */
+.mbom-locked-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: rgba(220, 53, 69, 0.08);
+  border: 1px solid rgba(220, 53, 69, 0.25);
+  border-radius: 6px;
+  color: var(--bs-danger, #dc3545);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.mbom-locked-banner i {
+  font-size: 1rem;
+}
 
 .mbom-tmpl-card {
   border: 1px solid var(--bs-border-color, #dee2e6);
