@@ -40,6 +40,8 @@ InvenTree renders PDF reports using Django's template engine. When printing a re
 | `routing.total_manufacturing_cost` | Total manufacturing cost (`total_labor_cost + total_machine_cost`) | `743.29` |
 | `routing.per_unit_manufacturing_cost` | Manufacturing cost amortised per unit (`total / standard_batch_size`) | `24.78` |
 | `routing.total_co2_kg` | Total estimated CO₂ emissions in kilograms for the batch | `0.090000` |
+| `routing.used_labor_rates` | Distinct `LaborRate` objects utilized across all operations in this routing | `[LaborRate: Assembler, ...]` |
+| `routing.used_machine_centers` | Distinct `MachineCenter` objects utilized across all operations in this routing | `[MachineCenter: Reflow Oven, ...]` |
 
 ---
 
@@ -116,7 +118,7 @@ It provides:
 4. Configure the template:
    - **Template Name**: `Manufacturing Traveler & Routing`
    - **Model Type**: Select `Part` (or `Build Order`)
-   - **File**: Upload [`mbom_routing_traveler_report.html`](file:///c:/Users/Tim/Documents/GIT/InventreePlugin/data/packages/inventree-mbom/inventree_mbom/templates/inventree_mbom/reports/mbom_routing_traveler_report.html)
+   - **File**: Upload [`mbom_routing_traveler_report.html`](../inventree_mbom/templates/inventree_mbom/reports/mbom_routing_traveler_report.html)
    - **Page Size**: `A4`
    - **Orientation**: `Portrait`
    - **Enabled**: `Checked`

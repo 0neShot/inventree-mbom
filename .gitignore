@@ -33,3 +33,8 @@ local_settings.py
 .DS_Store
 Thumbs.db
 *.log
+
+# Local utilities & scripts (not for upstream release)
+sync-mbom-static.ps1
+install_verify.py
+

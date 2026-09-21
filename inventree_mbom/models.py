@@ -22,10 +22,10 @@ from django.utils.translation import gettext_lazy as _
 
 import part.models as inventree_part
 
-
 # ---------------------------------------------------------------------------
 # Central Tariff Catalog
 # ---------------------------------------------------------------------------
+
 
 class LaborRate(models.Model):
     """A named labor classification with an hourly (or per-minute) rate.
@@ -159,6 +159,7 @@ class MachineCenter(models.Model):
 # ---------------------------------------------------------------------------
 # Process Templates (Reusable Blueprints)
 # ---------------------------------------------------------------------------
+
 
 class ProcessTemplate(models.Model):
     """A reusable process routing template.
@@ -302,6 +303,7 @@ class ProcessTemplateStep(models.Model):
 # Part Routings (Per-Assembly Instances)
 # ---------------------------------------------------------------------------
 
+
 class PartRouting(models.Model):
     """The manufacturing routing assigned to a specific assembly part.
 
@@ -370,7 +372,9 @@ class PartRouting(models.Model):
     @property
     def top_level_operations(self):
         """Top-level operations (excluding nested sub-steps), ordered by sequence."""
-        return self.operations.filter(parent_operation__isnull=True).order_by("sequence_number")
+        return self.operations.filter(parent_operation__isnull=True).order_by(
+            "sequence_number"
+        )
 
     def _get_top_level_operations(self):
         return self.top_level_operations
@@ -383,12 +387,37 @@ class PartRouting(models.Model):
     @property
     def total_setup_time_minutes(self) -> Decimal:
         """Total setup time in minutes across all operations."""
-        return sum((op.setup_time_minutes for op in self.operations.all()), Decimal("0.0000"))
+        return sum(
+            (op.setup_time_minutes for op in self.operations.all()), Decimal("0.0000")
+        )
 
     @property
     def total_run_time_per_unit_minutes(self) -> Decimal:
         """Total run time in minutes per unit across all operations."""
-        return sum((op.run_time_per_unit_minutes for op in self.operations.all()), Decimal("0.0000"))
+        return sum(
+            (op.run_time_per_unit_minutes for op in self.operations.all()),
+            Decimal("0.0000"),
+        )
+
+    @property
+    def used_labor_rates(self):
+        """Distinct LaborRate objects referenced across all operations in this routing."""
+        rate_ids = (
+            self.operations.filter(labor_rate__isnull=False)
+            .values_list("labor_rate_id", flat=True)
+            .distinct()
+        )
+        return LaborRate.objects.filter(id__in=rate_ids).order_by("name")
+
+    @property
+    def used_machine_centers(self):
+        """Distinct MachineCenter objects referenced across all operations in this routing."""
+        mc_ids = (
+            self.operations.filter(machine_center__isnull=False)
+            .values_list("machine_center_id", flat=True)
+            .distinct()
+        )
+        return MachineCenter.objects.filter(id__in=mc_ids).order_by("name")
 
     def total_labor_cost(self, batch_size: int = None) -> Decimal:
         """Sum of labor costs for all operations at all levels."""
@@ -512,14 +541,22 @@ class RoutingOperation(models.Model):
         old_seq = None
         if not is_new and not self.parent_operation_id:
             try:
-                old_seq = RoutingOperation.objects.filter(pk=self.pk).values_list("sequence_number", flat=True).first()
+                old_seq = (
+                    RoutingOperation.objects.filter(pk=self.pk)
+                    .values_list("sequence_number", flat=True)
+                    .first()
+                )
             except Exception:
                 pass
 
         super().save(*args, **kwargs)
 
         # If a top-level operation's sequence changed, cascade prefix to its child sub-operations
-        if old_seq and str(old_seq).strip() != str(self.sequence_number).strip() and not self.parent_operation_id:
+        if (
+            old_seq
+            and str(old_seq).strip() != str(self.sequence_number).strip()
+            and not self.parent_operation_id
+        ):
             parent_seq = str(self.sequence_number).strip()
             for sub in self.sub_operations.all():
                 curr_seq = str(sub.sequence_number).strip()
@@ -587,7 +624,7 @@ class RoutingOperation(models.Model):
         if not self.machine_center:
             return Decimal("0.000000")
         qty = batch_size or (self.routing.standard_batch_size if self.routing else 1)
-        total_machine_minutes = (
-            self.setup_time_minutes + (self.run_time_per_unit_minutes * qty)
+        total_machine_minutes = self.setup_time_minutes + (
+            self.run_time_per_unit_minutes * qty
         )
         return total_machine_minutes * self.machine_center.co2_factor_per_minute

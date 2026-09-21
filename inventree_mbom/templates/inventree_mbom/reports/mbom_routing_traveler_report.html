@@ -181,6 +181,45 @@
     color: #6c757d;
     margin-bottom: 4px;
   }
+
+  /* Applied Tariff Reference Box */
+  .rates-card {
+    border: 1px solid #e9ecef;
+    background: #fdfdfd;
+    border-radius: 4px;
+    padding: 6px 10px;
+    margin-top: 10px;
+    font-size: 8pt;
+  }
+  .rates-title {
+    font-size: 7.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #6c757d;
+    margin-bottom: 4px;
+  }
+  .rate-pill {
+    display: inline-block;
+    background: #f1f3f5;
+    border: 1px solid #dee2e6;
+    border-radius: 3px;
+    padding: 1px 6px;
+    margin-right: 6px;
+    margin-bottom: 2px;
+    font-size: 7.5pt;
+  }
+  .rate-subtitle {
+    font-weight: 600;
+    color: #495057;
+    margin-right: 4px;
+  }
+  .rate-sub {
+    color: #6c757d;
+    font-size: 7.5pt;
+    display: block;
+    margin-top: 1px;
+  }
+
   .no-routing-alert {
     padding: 16px;
     background: #fff3cd;
@@ -260,14 +299,14 @@
 <table class="mbom-table">
   <thead>
     <tr>
-      <th style="width: 60px;">{% trans "Seq" %}</th>
+      <th style="width: 50px;">{% trans "Seq" %}</th>
       <th>{% trans "Operation / Instructions" %}</th>
-      <th style="width: 110px;">{% trans "Workcenter / Machine" %}</th>
-      <th style="width: 100px;">{% trans "Labor Role" %}</th>
-      <th class="col-right" style="width: 65px;">{% trans "Setup" %}</th>
-      <th class="col-right" style="width: 65px;">{% trans "Cycle/Unit" %}</th>
-      <th class="col-right" style="width: 70px;">{% trans "Unit Cost" %}</th>
-      <th class="col-center" style="width: 70px;">{% trans "Sign-Off" %}</th>
+      <th style="width: 125px;">{% trans "Workcenter / Machine" %}</th>
+      <th style="width: 115px;">{% trans "Labor Role" %}</th>
+      <th style="width: 65px;">{% trans "Setup" %}</th>
+      <th style="width: 75px;">{% trans "Cycle/Unit" %}</th>
+      <th style="width: 75px;">{% trans "Unit Cost" %}</th>
+      <th class="col-center" style="width: 65px;">{% trans "Sign-Off" %}</th>
     </tr>
   </thead>
   <tbody>
@@ -278,11 +317,25 @@
         <strong>{{ op.name }}</strong>
         {% if op.description %}<br><span style="color:#6c757d;font-size:7.5pt;">{{ op.description }}</span>{% endif %}
       </td>
-      <td>{{ op.machine_center.name|default:"—" }}</td>
-      <td>{{ op.labor_rate.name|default:"—" }}</td>
-      <td class="col-right">{{ op.setup_time_minutes|floatformat:1 }} m</td>
-      <td class="col-right">{{ op.run_time_per_unit_minutes|floatformat:1 }} m</td>
-      <td class="col-right"><strong>{{ op.per_unit_cost|floatformat:2 }}</strong></td>
+      <td>
+        {% if op.machine_center %}
+          {{ op.machine_center.name }}
+          <span class="rate-sub">{{ op.machine_center.hourly_rate|floatformat:2 }} {{ op.machine_center.currency }}/hr</span>
+        {% else %}
+          —
+        {% endif %}
+      </td>
+      <td>
+        {% if op.labor_rate %}
+          {{ op.labor_rate.name }}
+          <span class="rate-sub">{{ op.labor_rate.hourly_rate|floatformat:2 }} {{ op.labor_rate.currency }}/hr</span>
+        {% else %}
+          —
+        {% endif %}
+      </td>
+      <td>{{ op.setup_time_minutes|floatformat:1 }} m</td>
+      <td>{{ op.run_time_per_unit_minutes|floatformat:1 }} m</td>
+      <td><strong>{{ op.per_unit_cost|floatformat:2 }}</strong></td>
       <td class="col-center"><span class="sign-box"></span></td>
     </tr>
 
@@ -296,11 +349,25 @@
         <span>{{ sub.name }}</span>
         {% if sub.description %}<br><span style="color:#6c757d;font-size:7.5pt;">{{ sub.description }}</span>{% endif %}
       </td>
-      <td>{{ sub.machine_center.name|default:"—" }}</td>
-      <td>{{ sub.labor_rate.name|default:"—" }}</td>
-      <td class="col-right">{{ sub.setup_time_minutes|floatformat:1 }} m</td>
-      <td class="col-right">{{ sub.run_time_per_unit_minutes|floatformat:1 }} m</td>
-      <td class="col-right">{{ sub.per_unit_cost|floatformat:2 }}</td>
+      <td>
+        {% if sub.machine_center %}
+          {{ sub.machine_center.name }}
+          <span class="rate-sub">{{ sub.machine_center.hourly_rate|floatformat:2 }} {{ sub.machine_center.currency }}/hr</span>
+        {% else %}
+          —
+        {% endif %}
+      </td>
+      <td>
+        {% if sub.labor_rate %}
+          {{ sub.labor_rate.name }}
+          <span class="rate-sub">{{ sub.labor_rate.hourly_rate|floatformat:2 }} {{ sub.labor_rate.currency }}/hr</span>
+        {% else %}
+          —
+        {% endif %}
+      </td>
+      <td>{{ sub.setup_time_minutes|floatformat:1 }} m</td>
+      <td>{{ sub.run_time_per_unit_minutes|floatformat:1 }} m</td>
+      <td>{{ sub.per_unit_cost|floatformat:2 }}</td>
       <td class="col-center"><span class="sign-box"></span></td>
     </tr>
     {% endfor %}
@@ -314,6 +381,27 @@
 <div class="notes-card">
   <div class="notes-title">{% trans "Process & Quality Notes" %}</div>
   <div style="font-size: 8pt; white-space: pre-line;">{{ routing.notes }}</div>
+</div>
+{% endif %}
+
+<!-- Applied Calculation Rates Reference -->
+{% if routing.used_labor_rates or routing.used_machine_centers %}
+<div class="rates-card">
+  <div class="rates-title">{% trans "Calculation Rates Reference (Tariffs Applied)" %}</div>
+  <div style="line-height: 1.6;">
+    {% if routing.used_labor_rates %}
+      <span class="rate-subtitle">{% trans "Labor" %}:</span>
+      {% for lr in routing.used_labor_rates %}
+        <span class="rate-pill">{{ lr.name }}: <strong>{{ lr.hourly_rate|floatformat:2 }} {{ lr.currency }}/hr</strong></span>
+      {% endfor %}
+    {% endif %}
+    {% if routing.used_machine_centers %}
+      <span class="rate-subtitle" style="{% if routing.used_labor_rates %}margin-left: 12px;{% endif %}">{% trans "Machines" %}:</span>
+      {% for mc in routing.used_machine_centers %}
+        <span class="rate-pill">{{ mc.name }}: <strong>{{ mc.hourly_rate|floatformat:2 }} {{ mc.currency }}/hr</strong></span>
+      {% endfor %}
+    {% endif %}
+  </div>
 </div>
 {% endif %}
 

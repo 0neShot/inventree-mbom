@@ -109,7 +109,9 @@ class ProcessTemplateSerializer(serializers.ModelSerializer):
 
     def get_steps(self, obj):
         """Return only top-level steps; sub-steps are nested within them."""
-        top_level = obj.steps.filter(parent_step__isnull=True).order_by("sequence_number")
+        top_level = obj.steps.filter(parent_step__isnull=True).order_by(
+            "sequence_number"
+        )
         return ProcessTemplateStepSerializer(top_level, many=True).data
 
 
@@ -227,9 +229,9 @@ class PartRoutingSerializer(serializers.ModelSerializer):
         return None
 
     def get_operations(self, obj):
-        top_level = obj.operations.filter(
-            parent_operation__isnull=True
-        ).order_by("sequence_number")
+        top_level = obj.operations.filter(parent_operation__isnull=True).order_by(
+            "sequence_number"
+        )
         return RoutingOperationSerializer(top_level, many=True).data
 
     def get_total_labor_cost(self, obj):
@@ -262,5 +264,9 @@ class ApplyTemplateSerializer(serializers.Serializer):
         if not mode:
             attrs["mode"] = "overwrite" if attrs.get("overwrite") else "skip"
         elif mode not in ["add", "overwrite", "skip"]:
-            attrs["mode"] = "overwrite" if mode == "true" else ("skip" if mode == "false" else "add")
+            attrs["mode"] = (
+                "overwrite"
+                if mode == "true"
+                else ("skip" if mode == "false" else "add")
+            )
         return attrs

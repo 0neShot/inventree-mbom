@@ -38,12 +38,13 @@ Multi-level rollup example:
 import logging
 from decimal import Decimal, ROUND_HALF_UP
 
-logger = logging.getLogger('inventree_mbom.pricing')
+logger = logging.getLogger("inventree_mbom.pricing")
 
 
 # =========================================================
 # Core Cost Calculation
 # =========================================================
+
 
 def get_mbom_unit_cost(part, batch_size: int = 1, _visited: set = None) -> dict:
     """Return the per-unit mBOM cost breakdown for a part.
@@ -68,18 +69,20 @@ def get_mbom_unit_cost(part, batch_size: int = 1, _visited: set = None) -> dict:
         _visited = set()
 
     empty = {
-        'labor_cost': Decimal('0.00'),
-        'machine_cost': Decimal('0.00'),
-        'mfg_cost': Decimal('0.00'),
-        'per_unit_labor': Decimal('0.00'),
-        'per_unit_machine': Decimal('0.00'),
-        'per_unit_mfg': Decimal('0.00'),
-        'co2_kg': Decimal('0.000000'),
-        'has_routing': False,
+        "labor_cost": Decimal("0.00"),
+        "machine_cost": Decimal("0.00"),
+        "mfg_cost": Decimal("0.00"),
+        "per_unit_labor": Decimal("0.00"),
+        "per_unit_machine": Decimal("0.00"),
+        "per_unit_mfg": Decimal("0.00"),
+        "co2_kg": Decimal("0.000000"),
+        "has_routing": False,
     }
 
     if part.pk in _visited:
-        logger.warning('mBOM: circular BoM detected at part %s (pk=%s)', part.name, part.pk)
+        logger.warning(
+            "mBOM: circular BoM detected at part %s (pk=%s)", part.name, part.pk
+        )
         return empty
 
     _visited.add(part.pk)
@@ -94,25 +97,31 @@ def get_mbom_unit_cost(part, batch_size: int = 1, _visited: set = None) -> dict:
         if not routing:
             return empty
 
-        labor_cost   = routing.total_labor_cost(batch_size)
+        labor_cost = routing.total_labor_cost(batch_size)
         machine_cost = routing.total_machine_cost(batch_size)
-        mfg_cost     = labor_cost + machine_cost
-        co2_kg       = routing.total_co2_kg(batch_size)
+        mfg_cost = labor_cost + machine_cost
+        co2_kg = routing.total_co2_kg(batch_size)
 
         qty = Decimal(str(batch_size))
         return {
-            'labor_cost':      labor_cost,
-            'machine_cost':    machine_cost,
-            'mfg_cost':        mfg_cost,
-            'per_unit_labor':   (labor_cost   / qty).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP),
-            'per_unit_machine': (machine_cost / qty).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP),
-            'per_unit_mfg':     (mfg_cost     / qty).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP),
-            'co2_kg':           co2_kg,
-            'has_routing':      True,
+            "labor_cost": labor_cost,
+            "machine_cost": machine_cost,
+            "mfg_cost": mfg_cost,
+            "per_unit_labor": (labor_cost / qty).quantize(
+                Decimal("0.000001"), rounding=ROUND_HALF_UP
+            ),
+            "per_unit_machine": (machine_cost / qty).quantize(
+                Decimal("0.000001"), rounding=ROUND_HALF_UP
+            ),
+            "per_unit_mfg": (mfg_cost / qty).quantize(
+                Decimal("0.000001"), rounding=ROUND_HALF_UP
+            ),
+            "co2_kg": co2_kg,
+            "has_routing": True,
         }
 
     except Exception as exc:
-        logger.error('mBOM: Error computing mBOM cost for part %s: %s', part.pk, exc)
+        logger.error("mBOM: Error computing mBOM cost for part %s: %s", part.pk, exc)
         return empty
 
 
@@ -128,8 +137,8 @@ def get_assembly_full_cost(part, batch_size: int = 1) -> dict:
         dict with all cost components and per-unit totals
     """
     # --- Material cost from InvenTree native pricing ---
-    material_min = Decimal('0.00')
-    material_max = Decimal('0.00')
+    material_min = Decimal("0.00")
+    material_max = Decimal("0.00")
 
     try:
         pricing = part.pricing
@@ -139,49 +148,51 @@ def get_assembly_full_cost(part, batch_size: int = 1) -> dict:
             if pricing.bom_cost_max is not None:
                 material_max = _to_decimal(pricing.bom_cost_max)
     except Exception as exc:
-        logger.debug('mBOM: Could not read PartPricing for part %s: %s', part.pk, exc)
+        logger.debug("mBOM: Could not read PartPricing for part %s: %s", part.pk, exc)
 
     # --- mBOM manufacturing cost ---
     mfg = get_mbom_unit_cost(part, batch_size)
 
     qty = Decimal(str(batch_size))
 
-    per_unit_material_min = (material_min / qty).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
-    per_unit_material_max = (material_max / qty).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
+    per_unit_material_min = (material_min / qty).quantize(
+        Decimal("0.000001"), rounding=ROUND_HALF_UP
+    )
+    per_unit_material_max = (material_max / qty).quantize(
+        Decimal("0.000001"), rounding=ROUND_HALF_UP
+    )
 
-    per_unit_total_min = per_unit_material_min + mfg['per_unit_mfg']
-    per_unit_total_max = per_unit_material_max + mfg['per_unit_mfg']
+    per_unit_total_min = per_unit_material_min + mfg["per_unit_mfg"]
+    per_unit_total_max = per_unit_material_max + mfg["per_unit_mfg"]
 
     return {
         # Batch totals
-        'batch_size':           batch_size,
-        'material_cost_min':    material_min,
-        'material_cost_max':    material_max,
-        'labor_cost':           mfg['labor_cost'],
-        'machine_cost':         mfg['machine_cost'],
-        'mfg_cost':             mfg['mfg_cost'],
-        'co2_kg':               mfg['co2_kg'],
-
+        "batch_size": batch_size,
+        "material_cost_min": material_min,
+        "material_cost_max": material_max,
+        "labor_cost": mfg["labor_cost"],
+        "machine_cost": mfg["machine_cost"],
+        "mfg_cost": mfg["mfg_cost"],
+        "co2_kg": mfg["co2_kg"],
         # Per-unit breakdown
-        'per_unit_material_min': per_unit_material_min,
-        'per_unit_material_max': per_unit_material_max,
-        'per_unit_labor':        mfg['per_unit_labor'],
-        'per_unit_machine':      mfg['per_unit_machine'],
-        'per_unit_mfg':          mfg['per_unit_mfg'],
-        'per_unit_total_min':    per_unit_total_min,
-        'per_unit_total_max':    per_unit_total_max,
-
+        "per_unit_material_min": per_unit_material_min,
+        "per_unit_material_max": per_unit_material_max,
+        "per_unit_labor": mfg["per_unit_labor"],
+        "per_unit_machine": mfg["per_unit_machine"],
+        "per_unit_mfg": mfg["per_unit_mfg"],
+        "per_unit_total_min": per_unit_total_min,
+        "per_unit_total_max": per_unit_total_max,
         # Metadata
-        'has_routing':           mfg['has_routing'],
-        'part_id':               part.pk,
-        'part_name':             part.name,
+        "has_routing": mfg["has_routing"],
+        "part_id": part.pk,
+        "part_name": part.name,
     }
 
 
 def _to_decimal(value) -> Decimal:
     """Safely convert a Money or numeric value to Decimal."""
     if value is None:
-        return Decimal('0.00')
+        return Decimal("0.00")
     try:
         # djmoney Money object
         return Decimal(str(value.amount))
@@ -192,6 +203,7 @@ def _to_decimal(value) -> Decimal:
 # =========================================================
 # Pricing Service: write mBOM costs into InvenTree pricing
 # =========================================================
+
 
 class MbomPricingService:
     """Service for pushing mBOM manufacturing costs into InvenTree's pricing system.
@@ -213,12 +225,15 @@ class MbomPricingService:
         """
         try:
             from part.models import PartPricing
+
             pricing, _ = PartPricing.objects.get_or_create(part_id=part_id)
             pricing.schedule_for_update()
-            logger.debug('mBOM: Scheduled pricing update for part %s', part_id)
+            logger.debug("mBOM: Scheduled pricing update for part %s", part_id)
             return True
         except Exception as exc:
-            logger.warning('mBOM: Failed to schedule pricing update for part %s: %s', part_id, exc)
+            logger.warning(
+                "mBOM: Failed to schedule pricing update for part %s: %s", part_id, exc
+            )
             return False
 
     @staticmethod
@@ -236,6 +251,7 @@ class MbomPricingService:
 
             if isinstance(part, (int, str)):
                 from part.models import Part
+
                 part = Part.objects.get(pk=int(part))
 
             try:
@@ -252,17 +268,17 @@ class MbomPricingService:
                 batch_size = routing.standard_batch_size or 1
 
             cost_data = get_assembly_full_cost(part, batch_size)
-            if not cost_data['has_routing']:
+            if not cost_data["has_routing"]:
                 return False
 
-            currency = getattr(pricing, 'currency', 'EUR') or 'EUR'
+            currency = getattr(pricing, "currency", "EUR") or "EUR"
             bom_min = _to_decimal(pricing.bom_cost_min)
             bom_max = _to_decimal(pricing.bom_cost_max)
-            mfg_unit = cost_data['per_unit_mfg']
+            mfg_unit = cost_data["per_unit_mfg"]
 
             # Total = BOM Material + mBOM Manufacturing
             total_min = bom_min + mfg_unit
-            total_max = (bom_max if bom_max > Decimal('0.00') else bom_min) + mfg_unit
+            total_max = (bom_max if bom_max > Decimal("0.00") else bom_min) + mfg_unit
 
             PartPricing.objects.filter(part_id=part.pk).update(
                 overall_min=total_min,
@@ -271,27 +287,38 @@ class MbomPricingService:
                 overall_max_currency=currency,
             )
             logger.info(
-                'mBOM: Synced PartPricing for %s (pk=%s): overall=%.4f..%.4f %s (mfg=%.4f)',
-                part.name, part.pk, total_min, total_max, currency, mfg_unit
+                "mBOM: Synced PartPricing for %s (pk=%s): overall=%.4f..%.4f %s (mfg=%.4f)",
+                part.name,
+                part.pk,
+                total_min,
+                total_max,
+                currency,
+                mfg_unit,
             )
 
             # Cascade to parent assemblies
             try:
                 from part.models import BomItem
+
                 parent_ids = list(
-                    BomItem.objects
-                    .filter(sub_part_id=part.pk)
-                    .values_list('part_id', flat=True)
+                    BomItem.objects.filter(sub_part_id=part.pk)
+                    .values_list("part_id", flat=True)
                     .distinct()
                 )
                 for pid in parent_ids:
                     MbomPricingService.schedule_for_update(pid)
             except Exception as exc:
-                logger.debug('mBOM: Could not cascade to parents of part %s: %s', part.pk, exc)
+                logger.debug(
+                    "mBOM: Could not cascade to parents of part %s: %s", part.pk, exc
+                )
 
             return True
         except Exception as exc:
-            logger.warning('mBOM: Failed to sync PartPricing for part %s: %s', getattr(part, 'pk', part), exc)
+            logger.warning(
+                "mBOM: Failed to sync PartPricing for part %s: %s",
+                getattr(part, "pk", part),
+                exc,
+            )
             return False
 
     @staticmethod
@@ -311,9 +338,8 @@ class MbomPricingService:
         filter_field = rate_field if rate_field.endswith("_id") else f"{rate_field}_id"
 
         part_ids = list(
-            RoutingOperation.objects
-            .filter(**{filter_field: rate_pk})
-            .values_list('routing__part_id', flat=True)
+            RoutingOperation.objects.filter(**{filter_field: rate_pk})
+            .values_list("routing__part_id", flat=True)
             .distinct()
         )
 
@@ -322,7 +348,9 @@ class MbomPricingService:
 
         logger.info(
             'mBOM: Rate "%s" (pk=%s) changed → scheduling %d parts for pricing update',
-            rate_instance, rate_pk, len(part_ids)
+            rate_instance,
+            rate_pk,
+            len(part_ids),
         )
 
         count = 0
@@ -331,6 +359,7 @@ class MbomPricingService:
                 count += 1
             try:
                 from part.models import Part
+
                 p = Part.objects.get(pk=part_id)
                 MbomPricingService.sync_part_pricing(p)
             except Exception:
@@ -339,17 +368,19 @@ class MbomPricingService:
             # Also cascade to parent assemblies that use this part in their BoM
             try:
                 from part.models import BomItem
+
                 parent_ids = list(
-                    BomItem.objects
-                    .filter(sub_part_id=part_id)
-                    .values_list('part_id', flat=True)
+                    BomItem.objects.filter(sub_part_id=part_id)
+                    .values_list("part_id", flat=True)
                     .distinct()
                 )
                 for pid in parent_ids:
                     if MbomPricingService.schedule_for_update(pid):
                         count += 1
             except Exception as exc:
-                logger.debug('mBOM: Could not cascade to parents of part %s: %s', part_id, exc)
+                logger.debug(
+                    "mBOM: Could not cascade to parents of part %s: %s", part_id, exc
+                )
 
         return count
 
@@ -368,23 +399,27 @@ class MbomPricingService:
             pricing, _ = PartPricing.objects.get_or_create(part_id=part.pk)
             mfg = get_mbom_unit_cost(part)
 
-            if not mfg['has_routing']:
+            if not mfg["has_routing"]:
                 return False
 
             # Try to update extra_cost field (InvenTree >= 1.4 may support this)
-            if hasattr(pricing, 'extra_cost_min') and hasattr(pricing, 'extra_cost_max'):
+            if hasattr(pricing, "extra_cost_min") and hasattr(
+                pricing, "extra_cost_max"
+            ):
                 from djmoney.money import Money
-                currency = getattr(pricing, 'currency', 'EUR')
-                pricing.extra_cost_min = Money(mfg['per_unit_mfg'], currency)
-                pricing.extra_cost_max = Money(mfg['per_unit_mfg'], currency)
-                pricing.save(update_fields=['extra_cost_min', 'extra_cost_max'])
+
+                currency = getattr(pricing, "currency", "EUR")
+                pricing.extra_cost_min = Money(mfg["per_unit_mfg"], currency)
+                pricing.extra_cost_max = Money(mfg["per_unit_mfg"], currency)
+                pricing.save(update_fields=["extra_cost_min", "extra_cost_max"])
                 logger.debug(
-                    'mBOM: Wrote extra cost %s to PartPricing for part %s',
-                    mfg['per_unit_mfg'], part.pk
+                    "mBOM: Wrote extra cost %s to PartPricing for part %s",
+                    mfg["per_unit_mfg"],
+                    part.pk,
                 )
                 return True
 
         except Exception as exc:
-            logger.debug('mBOM: write_extra_cost not supported or failed: %s', exc)
+            logger.debug("mBOM: write_extra_cost not supported or failed: %s", exc)
 
         return False

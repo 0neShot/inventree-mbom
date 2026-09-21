@@ -17,29 +17,30 @@ import logging
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 
-logger = logging.getLogger('inventree_mbom')
+logger = logging.getLogger("inventree_mbom")
 
 
 # =========================================================
 # Rate change signals → cascade pricing update
 # =========================================================
 
-@receiver(post_save, sender='inventree_mbom.LaborRate')
+
+@receiver(post_save, sender="inventree_mbom.LaborRate")
 def on_labor_rate_saved(sender, instance, created, **kwargs):
     """Recalculate pricing for all parts using this labor rate."""
     if created:
         return  # New rate has no operations yet
 
-    _check_and_schedule(instance, 'labor_rate')
+    _check_and_schedule(instance, "labor_rate")
 
 
-@receiver(post_save, sender='inventree_mbom.MachineCenter')
+@receiver(post_save, sender="inventree_mbom.MachineCenter")
 def on_machine_center_saved(sender, instance, created, **kwargs):
     """Recalculate pricing for all parts using this machine center."""
     if created:
         return
 
-    _check_and_schedule(instance, 'machine_center')
+    _check_and_schedule(instance, "machine_center")
 
 
 def _check_and_schedule(rate_instance, rate_field: str):
@@ -49,8 +50,10 @@ def _check_and_schedule(rate_instance, rate_field: str):
         from . import PLUGIN_SLUG
 
         plugin = registry.get_plugin(PLUGIN_SLUG)
-        if plugin and not plugin.get_setting('AUTO_RECALCULATE'):
-            logger.debug('mBOM: AUTO_RECALCULATE is off; skipping update for %s', rate_instance)
+        if plugin and not plugin.get_setting("AUTO_RECALCULATE"):
+            logger.debug(
+                "mBOM: AUTO_RECALCULATE is off; skipping update for %s", rate_instance
+            )
             return
 
     except Exception:
@@ -58,27 +61,33 @@ def _check_and_schedule(rate_instance, rate_field: str):
 
     try:
         from .pricing import MbomPricingService
-        count = MbomPricingService.schedule_for_affected_parts(rate_instance, rate_field)
+
+        count = MbomPricingService.schedule_for_affected_parts(
+            rate_instance, rate_field
+        )
         if count:
             logger.info(
                 'mBOM: %s "%s" changed → %d part pricing schedules updated',
-                rate_field, rate_instance, count
+                rate_field,
+                rate_instance,
+                count,
             )
     except Exception as exc:
-        logger.error('mBOM: Error scheduling pricing updates: %s', exc, exc_info=True)
+        logger.error("mBOM: Error scheduling pricing updates: %s", exc, exc_info=True)
 
 
 # =========================================================
 # RoutingOperation save/delete → update this part's pricing
 # =========================================================
 
-@receiver(post_save, sender='inventree_mbom.RoutingOperation')
+
+@receiver(post_save, sender="inventree_mbom.RoutingOperation")
 def on_routing_operation_saved(sender, instance, **kwargs):
     """Invalidate pricing when an operation is added or updated."""
     _schedule_routing_part(instance)
 
 
-@receiver(post_delete, sender='inventree_mbom.RoutingOperation')
+@receiver(post_delete, sender="inventree_mbom.RoutingOperation")
 def on_routing_operation_deleted(sender, instance, **kwargs):
     """Invalidate pricing when an operation is removed."""
     _schedule_routing_part(instance)
@@ -89,15 +98,16 @@ def _schedule_routing_part(operation):
     try:
         part_id = operation.routing.part_id
         from .pricing import MbomPricingService
+
         MbomPricingService.schedule_for_update(part_id)
 
         # Also cascade to parent assemblies
         try:
             from part.models import BomItem
+
             parent_ids = list(
-                BomItem.objects
-                .filter(sub_part_id=part_id)
-                .values_list('part_id', flat=True)
+                BomItem.objects.filter(sub_part_id=part_id)
+                .values_list("part_id", flat=True)
                 .distinct()
             )
             for pid in parent_ids:
@@ -106,37 +116,40 @@ def _schedule_routing_part(operation):
             pass
 
     except Exception as exc:
-        logger.debug('mBOM: Could not schedule part pricing update: %s', exc)
+        logger.debug("mBOM: Could not schedule part pricing update: %s", exc)
 
 
 # =========================================================
 # PartRouting save → try to write extra cost immediately
 # =========================================================
 
-@receiver(post_save, sender='inventree_mbom.PartRouting')
+
+@receiver(post_save, sender="inventree_mbom.PartRouting")
 def on_part_routing_saved(sender, instance, **kwargs):
     """When a routing is saved, attempt to push costs to InvenTree pricing."""
     try:
         from .pricing import MbomPricingService
+
         MbomPricingService.schedule_for_update(instance.part_id)
         MbomPricingService.sync_part_pricing(instance.part)
         MbomPricingService.write_extra_cost(instance.part)
     except Exception as exc:
-        logger.debug('mBOM: post_save on PartRouting pricing update: %s', exc)
+        logger.debug("mBOM: post_save on PartRouting pricing update: %s", exc)
 
 
 # =========================================================
 # PartPricing post_save → roll up mBOM if part is an assembly
 # =========================================================
 
-@receiver(post_save, sender='part.PartPricing')
+
+@receiver(post_save, sender="part.PartPricing")
 def on_part_pricing_saved(sender, instance, **kwargs):
     """When InvenTree recalculates PartPricing, re-roll mBOM costs into overall_min/max."""
     try:
         part = instance.part
-        if getattr(part, 'assembly', False):
+        if getattr(part, "assembly", False):
             from .pricing import MbomPricingService
+
             MbomPricingService.sync_part_pricing(part)
     except Exception as exc:
-        logger.debug('mBOM: on_part_pricing_saved error: %s', exc)
-
+        logger.debug("mBOM: on_part_pricing_saved error: %s", exc)

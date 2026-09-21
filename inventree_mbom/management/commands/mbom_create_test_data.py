@@ -24,11 +24,17 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **options):
         from inventree_mbom.models import (
-            LaborRate, MachineCenter, ProcessTemplate,
-            ProcessTemplateStep, PartRouting, RoutingOperation,
+            LaborRate,
+            MachineCenter,
+            ProcessTemplate,
+            ProcessTemplateStep,
+            PartRouting,
+            RoutingOperation,
         )
 
-        self.stdout.write(self.style.MIGRATE_HEADING("=== inventree-mbom Test Data Setup ==="))
+        self.stdout.write(
+            self.style.MIGRATE_HEADING("=== inventree-mbom Test Data Setup ===")
+        )
 
         # ----------------------------------------------------------------
         # 1. Labor Rates
@@ -41,7 +47,7 @@ class Command(BaseCommand):
                 "description": "PCB assembly and soldering technician",
                 "hourly_rate": Decimal("28.00"),
                 "currency": "EUR",
-            }
+            },
         )
         self.stdout.write(f"  {'Created' if created else 'Exists'}: {assembler}")
 
@@ -51,7 +57,7 @@ class Command(BaseCommand):
                 "description": "Process and quality engineer",
                 "hourly_rate": Decimal("95.00"),
                 "currency": "EUR",
-            }
+            },
         )
         self.stdout.write(f"  {'Created' if created else 'Exists'}: {engineer}")
 
@@ -67,7 +73,7 @@ class Command(BaseCommand):
                 "hourly_rate": Decimal("120.00"),
                 "currency": "EUR",
                 "co2_factor_per_minute": Decimal("0.003500"),
-            }
+            },
         )
         self.stdout.write(f"  {'Created' if created else 'Exists'}: {cnc}")
 
@@ -78,7 +84,7 @@ class Command(BaseCommand):
                 "hourly_rate": Decimal("35.00"),
                 "currency": "EUR",
                 "co2_factor_per_minute": Decimal("0.001200"),
-            }
+            },
         )
         self.stdout.write(f"  {'Created' if created else 'Exists'}: {reflow}")
 
@@ -147,9 +153,13 @@ class Command(BaseCommand):
                 run_time_per_unit_minutes=Decimal("5.00"),
             )
 
-            self.stdout.write(f"  Created 5 template steps (Op 10 with 3 sub-steps + Op 20)")
+            self.stdout.write(
+                f"  Created 5 template steps (Op 10 with 3 sub-steps + Op 20)"
+            )
         else:
-            self.stdout.write(f"  Template steps already exist ({template.steps.count()} steps)")
+            self.stdout.write(
+                f"  Template steps already exist ({template.steps.count()} steps)"
+            )
 
         # ----------------------------------------------------------------
         # 4. Test Assembly Part
@@ -173,9 +183,11 @@ class Command(BaseCommand):
                     "component": False,
                     "category": category,
                     "IPN": "TEST-MBOM-001",
-                }
+                },
             )
-            self.stdout.write(f"  {'Created' if created else 'Exists'}: {test_part} (pk={test_part.pk})")
+            self.stdout.write(
+                f"  {'Created' if created else 'Exists'}: {test_part} (pk={test_part.pk})"
+            )
 
             # ----------------------------------------------------------------
             # 5. Apply Template to Part
@@ -188,7 +200,7 @@ class Command(BaseCommand):
                     "source_template": template,
                     "standard_batch_size": 50,
                     "notes": "Test routing created by mbom_create_test_data command",
-                }
+                },
             )
 
             if routing_created:
@@ -210,19 +222,23 @@ class Command(BaseCommand):
 
                 copy_steps(template.steps.filter(parent_step__isnull=True))
                 op_count = routing.operations.count()
-                self.stdout.write(f"  Routing created with {op_count} operations (batch=50)")
+                self.stdout.write(
+                    f"  Routing created with {op_count} operations (batch=50)"
+                )
             else:
                 self.stdout.write(f"  Routing already exists (pk={routing.pk})")
 
             # ----------------------------------------------------------------
             # 6. Print cost summary
             # ----------------------------------------------------------------
-            self.stdout.write(self.style.MIGRATE_HEADING("\n=== Cost Summary (batch=50) ==="))
-            total_labor   = routing.total_labor_cost(50)
+            self.stdout.write(
+                self.style.MIGRATE_HEADING("\n=== Cost Summary (batch=50) ===")
+            )
+            total_labor = routing.total_labor_cost(50)
             total_machine = routing.total_machine_cost(50)
-            total_mfg     = routing.total_manufacturing_cost(50)
-            per_unit      = routing.per_unit_manufacturing_cost()
-            co2           = routing.total_co2_kg(50)
+            total_mfg = routing.total_manufacturing_cost(50)
+            per_unit = routing.per_unit_manufacturing_cost()
+            co2 = routing.total_co2_kg(50)
 
             self.stdout.write(f"  Labor cost (batch 50):    {total_labor:.4f} EUR")
             self.stdout.write(f"  Machine cost (batch 50):  {total_machine:.4f} EUR")
@@ -230,14 +246,18 @@ class Command(BaseCommand):
             self.stdout.write(f"  Per-unit mfg cost:        {per_unit:.4f} EUR")
             self.stdout.write(f"  CO2 estimate (batch):     {co2:.4f} kg")
 
-            self.stdout.write(self.style.SUCCESS(
-                f"\n✓ Test data ready! Navigate to part pk={test_part.pk} "
-                f"at http://127.0.0.1:8000/web/part/{test_part.pk}/ "
-                f"to see the mBOM tab."
-            ))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"\n✓ Test data ready! Navigate to part pk={test_part.pk} "
+                    f"at http://127.0.0.1:8000/web/part/{test_part.pk}/ "
+                    f"to see the mBOM tab."
+                )
+            )
 
         except ImportError:
-            self.stdout.write(self.style.WARNING(
-                "  Could not import InvenTree Part model. "
-                "Run this command from inside the InvenTree environment."
-            ))
+            self.stdout.write(
+                self.style.WARNING(
+                    "  Could not import InvenTree Part model. "
+                    "Run this command from inside the InvenTree environment."
+                )
+            )

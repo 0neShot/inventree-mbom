@@ -27,7 +27,13 @@ class LaborRateAdmin(admin.ModelAdmin):
 
 
 class MachineCenterAdmin(admin.ModelAdmin):
-    list_display = ["name", "hourly_rate", "currency", "co2_factor_per_minute", "is_active"]
+    list_display = [
+        "name",
+        "hourly_rate",
+        "currency",
+        "co2_factor_per_minute",
+        "is_active",
+    ]
     search_fields = ["name", "description"]
     list_filter = ["is_active", "currency"]
 

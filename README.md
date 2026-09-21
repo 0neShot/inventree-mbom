@@ -113,7 +113,7 @@ All endpoints are under `/plugin/inventree-mbom/`:
 ## Development Setup
 
 ```bash
-git clone https://github.com/yourusername/inventree-mbom
+git clone https://github.com/0neShot/inventree-mbom
 cd inventree-mbom
 pip install -e .
 ```

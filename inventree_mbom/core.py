@@ -40,8 +40,8 @@ class ManufacturingBOMPlugin(
     SLUG = PLUGIN_SLUG
 
     # Attribution
-    AUTHOR = "Tim"
-    WEBSITE = "https://github.com/yourusername/inventree-mbom"
+    AUTHOR = "0neShot"
+    WEBSITE = "https://github.com/0neShot/inventree-mbom"
     LICENSE = "MIT"
 
     # Minimum InvenTree version required
@@ -87,6 +87,7 @@ class ManufacturingBOMPlugin(
     def setup_urls(self):
         """Configure custom REST API URL endpoints for this plugin."""
         from .views import construct_urls
+
         return construct_urls()
 
     # ------------------------------------------------------------------
@@ -110,27 +111,31 @@ class ManufacturingBOMPlugin(
 
         # Web Settings Admin Panel (/web/settings/admin/)
         if target_model == "systemsettings":
-            panels.append({
-                "key": "mbom-settings-panel",
-                "title": str(_("Manufacturing (mBOM) Tariffs")),
-                "icon": "ti:tools",
-                "source": f"{js_source}:renderMbomSettingsPanel",
-            })
+            panels.append(
+                {
+                    "key": "mbom-settings-panel",
+                    "title": str(_("Manufacturing (mBOM) Tariffs")),
+                    "icon": "ti:tools",
+                    "source": f"{js_source}:renderMbomSettingsPanel",
+                }
+            )
 
         # Assembly Part Detail Panel (/web/part/<id>/)
         if target_model == "part" and target_id:
             try:
                 from part.models import Part
+
                 part = Part.objects.get(pk=int(target_id))
                 if part.assembly:
-                    panels.append({
-                        "key": "mbom-routing-panel",
-                        "title": str(_("Manufacturing Routing (mBOM)")),
-                        "icon": "ti:tools",
-                        "source": f"{js_source}:renderMbomPanel",
-                    })
+                    panels.append(
+                        {
+                            "key": "mbom-routing-panel",
+                            "title": str(_("Manufacturing Routing (mBOM)")),
+                            "icon": "ti:tools",
+                            "source": f"{js_source}:renderMbomPanel",
+                        }
+                    )
             except Exception:
                 pass
 
         return panels
-
