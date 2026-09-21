@@ -65,9 +65,13 @@ When a `LaborRate` or `MachineCenter` hourly rate is updated, Django `post_save`
 
 ## Setup
 
-* **Install** Install this plugin in the webinterface with the packagename `inventree-mbom`
-* **Enable** Enable the plugin in the plugin settings. You need to be signed in as a superuser for this. The server will restart if you enable the plugin
-* **Configure** There are no configuration options for this plugin. Your server needs to have URL and App mixins enabled.
+* **Install** Install this plugin in the webinterface with the packagename `inventree-mbom`. Restart both the InvenTree server and worker after installation.
+* **Enable** Enable the plugin in the plugin settings. You need to be signed in as a superuser for this. The server will restart if you enable the plugin.
+* **Configure** The following configuration options are available in plugin settings:
+  * **Default Currency**: Currency used for manufacturing cost calculations (default: `EUR`).
+  * **Cost Decimal Places**: Number of decimal places for cost display (default: `4`).
+  * **Auto-Recalculate on Rate Change**: Automatically recalculate part pricing when a labor or machine rate is updated.
+  * **Include Setup Cost in Unit Cost**: If enabled, setup (fixed) costs are amortised into the per-unit cost using the standard batch size defined on the routing.
 
 ---
 
