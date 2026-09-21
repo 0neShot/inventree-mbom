@@ -14,11 +14,13 @@ try:
     from django.test import TestCase
 
     from inventree_mbom.models import (
-        LaborRate, MachineCenter,
-        ProcessTemplate, ProcessTemplateStep,
-        PartRouting, RoutingOperation,
+        LaborRate,
+        MachineCenter,
+        ProcessTemplate,
+        ProcessTemplateStep,
+        PartRouting,
+        RoutingOperation,
     )
-
 
     class LaborRateTests(TestCase):
         """Tests for LaborRate model and cost helpers."""
@@ -37,12 +39,15 @@ try:
 
         def test_rate_per_minute(self):
             expected = Decimal("30.00") / Decimal("60")
-            self.assertAlmostEqual(float(self.lr.rate_per_minute), float(expected), places=6)
+            self.assertAlmostEqual(
+                float(self.lr.rate_per_minute), float(expected), places=6
+            )
 
         def test_rate_per_minute_60eur(self):
-            lr = LaborRate.objects.create(name="60EUR", hourly_rate=Decimal("60.00"), currency="EUR")
+            lr = LaborRate.objects.create(
+                name="60EUR", hourly_rate=Decimal("60.00"), currency="EUR"
+            )
             self.assertAlmostEqual(float(lr.rate_per_minute), 1.00, places=4)
-
 
     class MachineCenterTests(TestCase):
         """Tests for MachineCenter model."""
@@ -60,8 +65,9 @@ try:
 
         def test_rate_per_minute(self):
             expected = Decimal("120.00") / Decimal("60")
-            self.assertAlmostEqual(float(self.mc.rate_per_minute), float(expected), places=4)
-
+            self.assertAlmostEqual(
+                float(self.mc.rate_per_minute), float(expected), places=4
+            )
 
     class RoutingOperationCostTests(TestCase):
         """Detailed cost calculation tests for RoutingOperation."""
@@ -82,7 +88,7 @@ try:
             )
             self.part, _ = Part.objects.get_or_create(
                 name="mBOM Cost Test Assembly",
-                defaults={"assembly": True, "component": False}
+                defaults={"assembly": True, "component": False},
             )
             self.routing = PartRouting.objects.create(
                 part=self.part,
@@ -94,7 +100,7 @@ try:
                 name="Test Op",
                 labor_rate=self.lr,
                 machine_center=self.mc,
-                setup_time_minutes=Decimal("30.00"),    # 30 min setup
+                setup_time_minutes=Decimal("30.00"),  # 30 min setup
                 run_time_per_unit_minutes=Decimal("2.00"),  # 2 min/unit
             )
 
@@ -116,11 +122,15 @@ try:
 
         def test_labor_run_cost_per_unit_is_2(self):
             # 2 min * 1.00 EUR/min = 2.00
-            self.assertAlmostEqual(float(self.op.labor_run_cost_per_unit()), 2.00, places=4)
+            self.assertAlmostEqual(
+                float(self.op.labor_run_cost_per_unit()), 2.00, places=4
+            )
 
         def test_labor_cost_batch_10(self):
             # 30 + (2 * 10) = 50.00
-            self.assertAlmostEqual(float(self.op.labor_cost(batch_size=10)), 50.00, places=4)
+            self.assertAlmostEqual(
+                float(self.op.labor_cost(batch_size=10)), 50.00, places=4
+            )
 
         # --- Machine ---
 
@@ -133,21 +143,29 @@ try:
 
         def test_machine_run_cost_per_unit_is_4(self):
             # 2 min * 2.00 EUR/min = 4.00
-            self.assertAlmostEqual(float(self.op.machine_run_cost_per_unit()), 4.00, places=4)
+            self.assertAlmostEqual(
+                float(self.op.machine_run_cost_per_unit()), 4.00, places=4
+            )
 
         def test_machine_cost_batch_10(self):
             # 60 + (4 * 10) = 100.00
-            self.assertAlmostEqual(float(self.op.machine_cost(batch_size=10)), 100.00, places=4)
+            self.assertAlmostEqual(
+                float(self.op.machine_cost(batch_size=10)), 100.00, places=4
+            )
 
         # --- Combined ---
 
         def test_total_cost_batch_10(self):
             # labor(10) + machine(10) = 50 + 100 = 150.00
-            self.assertAlmostEqual(float(self.op.total_cost(batch_size=10)), 150.00, places=4)
+            self.assertAlmostEqual(
+                float(self.op.total_cost(batch_size=10)), 150.00, places=4
+            )
 
         def test_per_unit_cost_batch_10(self):
             # 150.00 / 10 = 15.00
-            self.assertAlmostEqual(float(self.op.per_unit_cost(batch_size=10)), 15.00, places=4)
+            self.assertAlmostEqual(
+                float(self.op.per_unit_cost(batch_size=10)), 15.00, places=4
+            )
 
         # --- CO2 ---
 
@@ -160,26 +178,31 @@ try:
 
         def test_routing_total_labor_cost(self):
             expected = float(self.op.labor_cost(10))
-            self.assertAlmostEqual(float(self.routing.total_labor_cost()), expected, places=4)
+            self.assertAlmostEqual(
+                float(self.routing.total_labor_cost()), expected, places=4
+            )
 
         def test_routing_total_machine_cost(self):
             expected = float(self.op.machine_cost(10))
-            self.assertAlmostEqual(float(self.routing.total_machine_cost()), expected, places=4)
+            self.assertAlmostEqual(
+                float(self.routing.total_machine_cost()), expected, places=4
+            )
 
         def test_routing_total_mfg_cost(self):
             self.assertAlmostEqual(
                 float(self.routing.total_manufacturing_cost()),
                 float(self.op.total_cost(10)),
-                places=4
+                places=4,
             )
 
         def test_routing_per_unit_cost(self):
             # batch=10, total=150, per_unit=15
-            self.assertAlmostEqual(float(self.routing.per_unit_manufacturing_cost()), 15.00, places=4)
+            self.assertAlmostEqual(
+                float(self.routing.per_unit_manufacturing_cost()), 15.00, places=4
+            )
 
         def test_routing_co2(self):
             self.assertAlmostEqual(float(self.routing.total_co2_kg()), 0.05, places=6)
-
 
     class HierarchicalOperationsTest(TestCase):
         """Tests for parent/child operation hierarchy."""
@@ -192,8 +215,7 @@ try:
                 hourly_rate=Decimal("60.00"),
             )
             self.part, _ = Part.objects.get_or_create(
-                name="mBOM Hier Test",
-                defaults={"assembly": True, "component": False}
+                name="mBOM Hier Test", defaults={"assembly": True, "component": False}
             )
             self.routing = PartRouting.objects.create(
                 part=self.part,
@@ -239,8 +261,9 @@ try:
             # Total: 18
             # labor rate = 60/hr = 1/min
             expected = (10 + 5 + 2 + 1) * 1.0  # = 18.00 EUR
-            self.assertAlmostEqual(float(self.routing.total_labor_cost(1)), expected, places=4)
-
+            self.assertAlmostEqual(
+                float(self.routing.total_labor_cost(1)), expected, places=4
+            )
 
     class ProcessTemplateTests(TestCase):
         """Tests for ProcessTemplate and step hierarchy."""
@@ -288,7 +311,6 @@ try:
             self.assertIn("10", str(self.step1))
             self.assertIn("Step 1", str(self.step1))
 
-
     class PricingEngineTests(TestCase):
         """Tests for the pricing engine (pricing.py)."""
 
@@ -306,7 +328,7 @@ try:
             )
             self.part, _ = Part.objects.get_or_create(
                 name="mBOM Pricing Engine Test",
-                defaults={"assembly": True, "component": False}
+                defaults={"assembly": True, "component": False},
             )
             self.routing = PartRouting.objects.create(
                 part=self.part,
@@ -331,38 +353,41 @@ try:
 
         def test_get_mbom_unit_cost_returns_dict(self):
             from inventree_mbom.pricing import get_mbom_unit_cost
+
             result = get_mbom_unit_cost(self.part, batch_size=10)
-            self.assertTrue(result['has_routing'])
-            self.assertIn('per_unit_mfg', result)
-            self.assertIn('co2_kg', result)
+            self.assertTrue(result["has_routing"])
+            self.assertIn("per_unit_mfg", result)
+            self.assertIn("co2_kg", result)
 
         def test_get_mbom_unit_cost_values(self):
             from inventree_mbom.pricing import get_mbom_unit_cost
+
             result = get_mbom_unit_cost(self.part, batch_size=10)
             # labor: 50.00, machine: 100.00, total: 150.00, per_unit: 15.00
-            self.assertAlmostEqual(float(result['mfg_cost']), 150.00, places=2)
-            self.assertAlmostEqual(float(result['per_unit_mfg']), 15.00, places=2)
+            self.assertAlmostEqual(float(result["mfg_cost"]), 150.00, places=2)
+            self.assertAlmostEqual(float(result["per_unit_mfg"]), 15.00, places=2)
 
         def test_no_routing_returns_empty(self):
             from inventree_mbom.pricing import get_mbom_unit_cost
             from part.models import Part
+
             other_part, _ = Part.objects.get_or_create(
                 name="mBOM No Routing Part",
-                defaults={"assembly": True, "component": False}
+                defaults={"assembly": True, "component": False},
             )
             result = get_mbom_unit_cost(other_part)
-            self.assertFalse(result['has_routing'])
-            self.assertEqual(result['per_unit_mfg'], Decimal('0.00'))
+            self.assertFalse(result["has_routing"])
+            self.assertEqual(result["per_unit_mfg"], Decimal("0.00"))
             other_part.delete()
 
         def test_get_assembly_full_cost(self):
             from inventree_mbom.pricing import get_assembly_full_cost
-            result = get_assembly_full_cost(self.part, batch_size=10)
-            self.assertIn('per_unit_total_min', result)
-            self.assertIn('batch_size', result)
-            self.assertEqual(result['batch_size'], 10)
-            self.assertTrue(result['has_routing'])
 
+            result = get_assembly_full_cost(self.part, batch_size=10)
+            self.assertIn("per_unit_total_min", result)
+            self.assertIn("batch_size", result)
+            self.assertEqual(result["batch_size"], 10)
+            self.assertTrue(result["has_routing"])
 
 except ImportError:
     pass  # Django not available in this context
