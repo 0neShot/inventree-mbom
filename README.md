@@ -60,32 +60,11 @@ When a `LaborRate` or `MachineCenter` hourly rate is updated, Django `post_save`
 
 ---
 
-## Installation
+## Setup
 
-### 1. Install in editable mode (for development)
-
-```bash
-# Inside the InvenTree virtual environment
-pip install -e /path/to/inventree-mbom
-```
-
-### 2. Enable the plugin in InvenTree
-
-Go to **Settings → Plugins** and enable `inventree-mbom`.
-
-### 3. Run database migrations
-
-```bash
-# If using InvenTree's invoke tasks:
-invoke migrate
-
-# Or directly:
-python manage.py migrate inventree_mbom
-```
-
-### 4. Verify installation
-
-Navigate to any assembly part → you should see the **"Manufacturing Routing (mBOM)"** tab.
+* **Install** Install this plugin in the webinterface with the packagename `inventree-mbom`
+* **Enable** Enable the plugin in the plugin settings. You need to be signed in as a superuser for this. The server will restart if you enable the plugin
+* **Configure** There are no configuration options for this plugin. Your server needs to have URL and App mixins enabled.
 
 ---
 
@@ -110,15 +89,7 @@ All endpoints are under `/plugin/inventree-mbom/`:
 
 ---
 
-## Development Setup
-
-```bash
-git clone https://github.com/0neShot/inventree-mbom
-cd inventree-mbom
-pip install -e .
-```
-
-### Running Tests
+## Running Tests
 
 ```bash
 # From InvenTree root:
