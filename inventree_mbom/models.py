@@ -367,8 +367,28 @@ class PartRouting(models.Model):
     # Cost computation helpers
     # ------------------------------------------------------------------
 
+    @property
+    def top_level_operations(self):
+        """Top-level operations (excluding nested sub-steps), ordered by sequence."""
+        return self.operations.filter(parent_operation__isnull=True).order_by("sequence_number")
+
     def _get_top_level_operations(self):
-        return self.operations.filter(parent_operation__isnull=True)
+        return self.top_level_operations
+
+    @property
+    def all_operations(self):
+        """All operations (including nested sub-steps), ordered by sequence."""
+        return self.operations.all().order_by("sequence_number")
+
+    @property
+    def total_setup_time_minutes(self) -> Decimal:
+        """Total setup time in minutes across all operations."""
+        return sum((op.setup_time_minutes for op in self.operations.all()), Decimal("0.0000"))
+
+    @property
+    def total_run_time_per_unit_minutes(self) -> Decimal:
+        """Total run time in minutes per unit across all operations."""
+        return sum((op.run_time_per_unit_minutes for op in self.operations.all()), Decimal("0.0000"))
 
     def total_labor_cost(self, batch_size: int = None) -> Decimal:
         """Sum of labor costs for all operations at all levels."""
@@ -534,9 +554,10 @@ class RoutingOperation(models.Model):
         """Labor cost per unit produced."""
         return self.run_time_per_unit_minutes * self._labor_rate_per_min()
 
-    def labor_cost(self, batch_size: int = 1) -> Decimal:
+    def labor_cost(self, batch_size: int = None) -> Decimal:
         """Total labor cost for a given batch size."""
-        return self.labor_setup_cost() + (self.labor_run_cost_per_unit() * batch_size)
+        qty = batch_size or (self.routing.standard_batch_size if self.routing else 1)
+        return self.labor_setup_cost() + (self.labor_run_cost_per_unit() * qty)
 
     def machine_setup_cost(self) -> Decimal:
         """Fixed machine cost for setup (once per batch)."""
@@ -546,23 +567,27 @@ class RoutingOperation(models.Model):
         """Machine cost per unit produced."""
         return self.run_time_per_unit_minutes * self._machine_rate_per_min()
 
-    def machine_cost(self, batch_size: int = 1) -> Decimal:
+    def machine_cost(self, batch_size: int = None) -> Decimal:
         """Total machine cost for a given batch size."""
-        return self.machine_setup_cost() + (self.machine_run_cost_per_unit() * batch_size)
+        qty = batch_size or (self.routing.standard_batch_size if self.routing else 1)
+        return self.machine_setup_cost() + (self.machine_run_cost_per_unit() * qty)
 
-    def total_cost(self, batch_size: int = 1) -> Decimal:
+    def total_cost(self, batch_size: int = None) -> Decimal:
         """Combined labor + machine cost."""
-        return self.labor_cost(batch_size) + self.machine_cost(batch_size)
+        qty = batch_size or (self.routing.standard_batch_size if self.routing else 1)
+        return self.labor_cost(qty) + self.machine_cost(qty)
 
-    def per_unit_cost(self, batch_size: int = 1) -> Decimal:
+    def per_unit_cost(self, batch_size: int = None) -> Decimal:
         """Per-unit cost amortised over batch size."""
-        return self.total_cost(batch_size) / Decimal(str(batch_size))
+        qty = batch_size or (self.routing.standard_batch_size if self.routing else 1)
+        return self.total_cost(qty) / Decimal(str(qty))
 
-    def co2_kg(self, batch_size: int = 1) -> Decimal:
+    def co2_kg(self, batch_size: int = None) -> Decimal:
         """CO₂ emissions in kg for this operation."""
         if not self.machine_center:
             return Decimal("0.000000")
+        qty = batch_size or (self.routing.standard_batch_size if self.routing else 1)
         total_machine_minutes = (
-            self.setup_time_minutes + (self.run_time_per_unit_minutes * batch_size)
+            self.setup_time_minutes + (self.run_time_per_unit_minutes * qty)
         )
         return total_machine_minutes * self.machine_center.co2_factor_per_minute

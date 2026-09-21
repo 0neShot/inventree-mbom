@@ -1,0 +1,336 @@
+{% extends "report/inventree_report_base.html" %}
+{% load i18n %}
+{% load inventree_extras %}
+
+<!--
+  mBOM Manufacturing Routing & Shop Traveler Report
+  --------------------------------------------------
+  Can be used as a Part Report (context: part) or Build Report (context: build, part=build.part).
+  Renders manufacturing routing operations, labor rates, machine centers, setup/run times,
+  amortised costs, and shop-floor sign-off fields.
+-->
+
+{% block page_content %}
+
+{% with routing=part.mbom_routing %}
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 15mm 12mm 15mm 12mm;
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      color: #666;
+    }
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #212529;
+    font-size: 9pt;
+    line-height: 1.35;
+  }
+
+  /* Header Section */
+  .report-header {
+    border-bottom: 2px solid #206bc4;
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .report-title-block h1 {
+    font-size: 16pt;
+    margin: 0 0 4px 0;
+    color: #1a202c;
+    font-weight: 700;
+  }
+  .report-subtitle {
+    font-size: 9pt;
+    color: #6c757d;
+  }
+  .report-meta-box {
+    text-align: right;
+    font-size: 8pt;
+    color: #495057;
+  }
+
+  /* Part Overview Grid */
+  .part-info-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 14px;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+  }
+  .part-info-table td {
+    padding: 6px 10px;
+    vertical-align: top;
+  }
+  .part-label {
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    color: #6c757d;
+    font-weight: 600;
+  }
+  .part-value {
+    font-size: 9.5pt;
+    font-weight: 600;
+    color: #212529;
+  }
+
+  /* Summary Metrics Cards */
+  .metrics-container {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .metric-card {
+    flex: 1;
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 6px 8px;
+    text-align: center;
+  }
+  .metric-card.accent {
+    border-color: #206bc4;
+    background: #f0f6ff;
+  }
+  .metric-title {
+    font-size: 7pt;
+    text-transform: uppercase;
+    color: #6c757d;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .metric-val {
+    font-size: 11pt;
+    font-weight: 700;
+    color: #1a202c;
+  }
+  .metric-card.accent .metric-val {
+    color: #206bc4;
+  }
+
+  /* Routing Operations Table */
+  .mbom-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 14px;
+    font-size: 8.5pt;
+  }
+  .mbom-table th {
+    background-color: #f1f3f5;
+    border-top: 1px solid #ced4da;
+    border-bottom: 2px solid #ced4da;
+    padding: 6px 8px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 8pt;
+    color: #495057;
+    text-transform: uppercase;
+  }
+  .mbom-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #e9ecef;
+    vertical-align: middle;
+  }
+  .mbom-table tr.sub-op td {
+    background-color: #fafbfc;
+    font-size: 8pt;
+  }
+  .seq-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    background: #e9ecef;
+    border-radius: 3px;
+    font-family: monospace;
+    font-weight: 700;
+    font-size: 8pt;
+    color: #343a40;
+  }
+  .col-right {
+    text-align: right;
+  }
+  .col-center {
+    text-align: center;
+  }
+  .sign-box {
+    border: 1px dashed #adb5bd;
+    height: 20px;
+    width: 60px;
+    display: inline-block;
+    border-radius: 2px;
+  }
+
+  /* Notes Box */
+  .notes-card {
+    border: 1px solid #e9ecef;
+    background: #fff;
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-top: 10px;
+  }
+  .notes-title {
+    font-size: 8pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #6c757d;
+    margin-bottom: 4px;
+  }
+  .no-routing-alert {
+    padding: 16px;
+    background: #fff3cd;
+    border: 1px solid #ffeeba;
+    border-radius: 4px;
+    color: #856404;
+    text-align: center;
+  }
+</style>
+
+<!-- Header -->
+<div class="report-header">
+  <div class="report-title-block">
+    <h1>{% trans "Manufacturing Traveler & Routing" %}</h1>
+    <div class="report-subtitle">
+      {% trans "Assembly Process Sheet & Production Operations" %}
+    </div>
+  </div>
+  <div class="report-meta-box">
+    <div><strong>{% trans "Date" %}:</strong> {% now "Y-m-d H:i" %}</div>
+    {% if build %}
+    <div><strong>{% trans "Build Order" %}:</strong> {{ build.reference }}</div>
+    <div><strong>{% trans "Batch Quantity" %}:</strong> {{ build.quantity }}</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Part Information -->
+<table class="part-info-table">
+  <tr>
+    <td style="width: 25%;">
+      <div class="part-label">{% trans "Part IPN / Number" %}</div>
+      <div class="part-value">{{ part.IPN|default:part.name }}</div>
+    </td>
+    <td style="width: 35%;">
+      <div class="part-label">{% trans "Part Description" %}</div>
+      <div class="part-value" style="font-weight: normal; font-size: 8.5pt;">{{ part.description|default:"—" }}</div>
+    </td>
+    <td style="width: 15%;">
+      <div class="part-label">{% trans "Revision" %}</div>
+      <div class="part-value">{{ part.revision|default:"—" }}</div>
+    </td>
+    <td style="width: 25%;">
+      <div class="part-label">{% trans "Standard Batch Size" %}</div>
+      <div class="part-value">{{ routing.standard_batch_size|default:1 }} {% trans "units" %}</div>
+    </td>
+  </tr>
+</table>
+
+{% if routing and routing.operations.exists %}
+
+<!-- High-Level Manufacturing Metrics -->
+<div class="metrics-container">
+  <div class="metric-card">
+    <div class="metric-title">{% trans "Setup Time" %}</div>
+    <div class="metric-val">{{ routing.total_setup_time_minutes|floatformat:1 }} <small style="font-size:8pt;font-weight:normal;">min</small></div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-title">{% trans "Run Time / Unit" %}</div>
+    <div class="metric-val">{{ routing.total_run_time_per_unit_minutes|floatformat:1 }} <small style="font-size:8pt;font-weight:normal;">min</small></div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-title">{% trans "Total Labor Cost" %}</div>
+    <div class="metric-val">{{ routing.total_labor_cost|floatformat:2 }} <small style="font-size:8pt;font-weight:normal;">EUR</small></div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-title">{% trans "Total Machine Cost" %}</div>
+    <div class="metric-val">{{ routing.total_machine_cost|floatformat:2 }} <small style="font-size:8pt;font-weight:normal;">EUR</small></div>
+  </div>
+  <div class="metric-card accent">
+    <div class="metric-title">{% trans "Mfg Cost / Unit" %}</div>
+    <div class="metric-val">{{ routing.per_unit_manufacturing_cost|floatformat:2 }} <small style="font-size:8pt;font-weight:normal;">EUR</small></div>
+  </div>
+</div>
+
+<!-- Operations Table -->
+<table class="mbom-table">
+  <thead>
+    <tr>
+      <th style="width: 60px;">{% trans "Seq" %}</th>
+      <th>{% trans "Operation / Instructions" %}</th>
+      <th style="width: 110px;">{% trans "Workcenter / Machine" %}</th>
+      <th style="width: 100px;">{% trans "Labor Role" %}</th>
+      <th class="col-right" style="width: 65px;">{% trans "Setup" %}</th>
+      <th class="col-right" style="width: 65px;">{% trans "Cycle/Unit" %}</th>
+      <th class="col-right" style="width: 70px;">{% trans "Unit Cost" %}</th>
+      <th class="col-center" style="width: 70px;">{% trans "Sign-Off" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for op in routing.top_level_operations %}
+    <tr>
+      <td><span class="seq-badge">{{ op.sequence_number }}</span></td>
+      <td>
+        <strong>{{ op.name }}</strong>
+        {% if op.description %}<br><span style="color:#6c757d;font-size:7.5pt;">{{ op.description }}</span>{% endif %}
+      </td>
+      <td>{{ op.machine_center.name|default:"—" }}</td>
+      <td>{{ op.labor_rate.name|default:"—" }}</td>
+      <td class="col-right">{{ op.setup_time_minutes|floatformat:1 }} m</td>
+      <td class="col-right">{{ op.run_time_per_unit_minutes|floatformat:1 }} m</td>
+      <td class="col-right"><strong>{{ op.per_unit_cost|floatformat:2 }}</strong></td>
+      <td class="col-center"><span class="sign-box"></span></td>
+    </tr>
+
+    <!-- Nested Sub-steps / Operations -->
+    {% for sub in op.sub_operations.all %}
+    <tr class="sub-op">
+      <td style="padding-left: 14px;">
+        <span style="color:#868e96;">↳</span> <span class="seq-badge" style="background:#dee2e6;font-size:7.5pt;">{{ sub.sequence_number }}</span>
+      </td>
+      <td style="padding-left: 14px;">
+        <span>{{ sub.name }}</span>
+        {% if sub.description %}<br><span style="color:#6c757d;font-size:7.5pt;">{{ sub.description }}</span>{% endif %}
+      </td>
+      <td>{{ sub.machine_center.name|default:"—" }}</td>
+      <td>{{ sub.labor_rate.name|default:"—" }}</td>
+      <td class="col-right">{{ sub.setup_time_minutes|floatformat:1 }} m</td>
+      <td class="col-right">{{ sub.run_time_per_unit_minutes|floatformat:1 }} m</td>
+      <td class="col-right">{{ sub.per_unit_cost|floatformat:2 }}</td>
+      <td class="col-center"><span class="sign-box"></span></td>
+    </tr>
+    {% endfor %}
+
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- Routing Notes & Quality Instructions -->
+{% if routing.notes %}
+<div class="notes-card">
+  <div class="notes-title">{% trans "Process & Quality Notes" %}</div>
+  <div style="font-size: 8pt; white-space: pre-line;">{{ routing.notes }}</div>
+</div>
+{% endif %}
+
+<div style="margin-top: 16px; font-size: 7.5pt; color: #868e96; display: flex; justify-content: space-between;">
+  <span>{% trans "Source Template" %}: {{ routing.source_template.name|default:"Manual Routing" }}</span>
+  <span>{% trans "Last Modified" %}: {{ routing.updated|date:"Y-m-d H:i" }}{% if routing.updated_by %} ({% trans "by" %} {{ routing.updated_by.get_full_name|default:routing.updated_by.username }}){% endif %}</span>
+</div>
+
+{% else %}
+<div class="no-routing-alert">
+  <strong>{% trans "No Manufacturing Routing Defined" %}</strong>
+  <p style="margin: 4px 0 0 0; font-size: 8pt;">
+    {% trans "This assembly part does not have an active mBOM routing. Create one in the InvenTree Part Pricing tab to generate shop-floor travelers and labor/machine operation breakdown." %}
+  </p>
+</div>
+{% endif %}
+
+{% endwith %}
+
+{% endblock page_content %}
