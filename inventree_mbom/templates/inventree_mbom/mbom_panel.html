@@ -199,8 +199,9 @@
         <div class="mbom-field">
           <label>{% trans "If routing already exists" %}</label>
           <select id="mbom-tmpl-overwrite">
-            <option value="false">{% trans "Keep existing (skip)" %}</option>
-            <option value="true">{% trans "Overwrite (replace operations)" %}</option>
+            <option value="add">{% trans "Add (combine with existing)" %}</option>
+            <option value="overwrite">{% trans "Overwrite (replace operations)" %}</option>
+            <option value="skip">{% trans "Keep existing (skip)" %}</option>
           </select>
         </div>
       </div>

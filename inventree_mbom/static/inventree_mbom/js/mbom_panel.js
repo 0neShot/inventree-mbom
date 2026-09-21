@@ -981,11 +981,17 @@ class MbomPanel {
       return;
     }
 
+    const modeVal = overwriteBox ? overwriteBox.value : 'add';
+    const isOverwrite = modeVal === 'true' || modeVal === 'overwrite';
+    const isAdd = modeVal === 'add';
+    const mode = isAdd ? 'add' : (isOverwrite ? 'overwrite' : 'skip');
+
     const payload = {
       part_id:     this.partId,
       template_id: parseInt(tmplId),
       batch_size:  batchInput ? (parseInt(batchInput.value) || 1) : 1,
-      overwrite:   overwriteBox ? (overwriteBox.value === 'true' || overwriteBox.checked) : false,
+      mode:        mode,
+      overwrite:   isOverwrite,
     };
 
     try {
@@ -995,8 +1001,9 @@ class MbomPanel {
       });
 
       this._closeDialogs();
-      this.toast('Template applied successfully!');
-      this.routingId = res.pk || res.id;
+      const successMsg = mode === 'add' ? 'Template operations added successfully!' : 'Template applied successfully!';
+      this.toast(successMsg);
+      this.routingId = res.pk || res.id || res.routing_id;
       await this.loadCostSummary();
       await this.loadOperations();
     } catch (err) {

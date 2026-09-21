@@ -306,7 +306,7 @@ class ApplyTemplateView(APIView):
         data = serializer.validated_data
         part_id = data["part_id"]
         template_id = data["template_id"]
-        overwrite = data["overwrite"]
+        mode = data.get("mode") or ("overwrite" if data.get("overwrite") else "skip")
         batch_size = data["batch_size"]
 
         try:
@@ -346,28 +346,78 @@ class ApplyTemplateView(APIView):
             },
         )
 
-        if not created and not overwrite:
+        if not created and mode == "skip":
             return Response(
                 {
-                    "error": "Routing already exists. Pass overwrite=true to replace.",
+                    "error": "Routing already exists. Select 'Overwrite' to replace or 'Add' to combine.",
                     "routing_id": routing.pk,
                 },
                 status=status.HTTP_409_CONFLICT,
             )
 
-        if not created and overwrite:
+        if not created and mode == "overwrite":
             routing.operations.all().delete()
             routing.source_template = template
             routing.standard_batch_size = batch_size
             routing.save()
 
+        # Determine sequence numbering offset for 'add' mode if colliding
+        existing_root_ops = list(
+            routing.operations.filter(parent_operation__isnull=True).order_by("sequence_number")
+        )
+        existing_root_seqs = {op.sequence_number.strip() for op in existing_root_ops}
+        incoming_root_steps = list(
+            template.steps.filter(parent_step__isnull=True).order_by("sequence_number")
+        )
+
+        offset = 0
+        if mode == "add" and existing_root_ops:
+            has_collision = any(s.sequence_number.strip() in existing_root_seqs for s in incoming_root_steps)
+            if has_collision:
+                nums = []
+                for op in existing_root_ops:
+                    try:
+                        nums.append(float(op.sequence_number.strip()))
+                    except ValueError:
+                        pass
+                max_val = max(nums) if nums else len(existing_root_ops) * 10
+                inc_nums = []
+                for s in incoming_root_steps:
+                    try:
+                        inc_nums.append(float(s.sequence_number.strip()))
+                    except ValueError:
+                        pass
+                min_inc = min(inc_nums) if inc_nums else 10.0
+
+                if max_val >= 10:
+                    next_slot = ((int(max_val) // 10) + 1) * 10
+                else:
+                    next_slot = int(max_val) + 1
+                offset = max(0, int(next_slot - min_inc))
+
+        def get_seq(original_seq, parent_seq=None):
+            if offset == 0:
+                return original_seq
+            if parent_seq is not None:
+                parts = str(original_seq).split(".")
+                suffix = ".".join(parts[1:]) if len(parts) > 1 else parts[0]
+                return f"{parent_seq}.{suffix}"
+            try:
+                val = float(original_seq)
+                new_val = val + offset
+                return str(int(new_val)) if new_val.is_integer() else str(new_val)
+            except ValueError:
+                return f"{original_seq}_{offset}"
+
         # Copy template steps -> RoutingOperations
         def copy_steps(steps, parent_op=None):
             for step in steps.order_by("sequence_number"):
+                parent_seq = parent_op.sequence_number if parent_op else None
+                seq = get_seq(step.sequence_number, parent_seq)
                 op = RoutingOperation.objects.create(
                     routing=routing,
                     parent_operation=parent_op,
-                    sequence_number=step.sequence_number,
+                    sequence_number=seq,
                     name=step.name,
                     description=step.description,
                     labor_rate=step.labor_rate,

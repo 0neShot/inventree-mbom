@@ -253,5 +253,14 @@ class ApplyTemplateSerializer(serializers.Serializer):
 
     part_id = serializers.IntegerField(required=True)
     template_id = serializers.IntegerField(required=True)
-    overwrite = serializers.BooleanField(default=False)
+    mode = serializers.CharField(required=False, default=None)
+    overwrite = serializers.BooleanField(required=False, default=False)
     batch_size = serializers.IntegerField(default=1, min_value=1)
+
+    def validate(self, attrs):
+        mode = attrs.get("mode")
+        if not mode:
+            attrs["mode"] = "overwrite" if attrs.get("overwrite") else "skip"
+        elif mode not in ["add", "overwrite", "skip"]:
+            attrs["mode"] = "overwrite" if mode == "true" else ("skip" if mode == "false" else "add")
+        return attrs
