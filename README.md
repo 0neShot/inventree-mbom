@@ -68,6 +68,7 @@ When a `LaborRate` or `MachineCenter` hourly rate is updated, Django `post_save`
 * **Install** Install this plugin in the webinterface with the packagename `inventree-mbom`
 * **Enable** Enable the plugin in the plugin settings. You need to be signed in as a superuser for this. The server will restart if you enable the plugin
 * **Configure** There are no configuration options for this plugin. Your server needs to have URL and App mixins enabled.
+<img width=40% height=40% alt="grafik" src="https://github.com/user-attachments/assets/849841a1-b0fc-4863-a2f4-78fe525c502a" />
 
 ---
 
