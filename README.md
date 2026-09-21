@@ -72,6 +72,7 @@ When a `LaborRate` or `MachineCenter` hourly rate is updated, Django `post_save`
   * **Cost Decimal Places**: Number of decimal places for cost display (default: `4`).
   * **Auto-Recalculate on Rate Change**: Automatically recalculate part pricing when a labor or machine rate is updated.
   * **Include Setup Cost in Unit Cost**: If enabled, setup (fixed) costs are amortised into the per-unit cost using the standard batch size defined on the routing.
+<img width=40% height=40% alt="grafik" src="https://github.com/user-attachments/assets/849841a1-b0fc-4863-a2f4-78fe525c502a" />
 
 ---
 
