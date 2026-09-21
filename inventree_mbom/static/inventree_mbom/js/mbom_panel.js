@@ -1182,6 +1182,7 @@ export async function renderMbomSettingsPanel(target, context) {
   let laborRates = [];
   let machineCenters = [];
   let templates = [];
+  const expandedTemplateIds = new Set();
 
   const modalBackdrop = target.querySelector('#mbom-settings-modal-backdrop');
   const modalTitle = target.querySelector('#mbom-sm-title');
@@ -1285,6 +1286,9 @@ export async function renderMbomSettingsPanel(target, context) {
       const rate = target.querySelector('#mbom-sm-l-rate').value;
       if (!name || !rate) return showMbomToast('Name and Hourly Rate are required', 'error');
 
+      const saveBtn = target.querySelector('#mbom-sm-save');
+      if (saveBtn) saveBtn.disabled = true;
+
       const payload = {
         name,
         description: target.querySelector('#mbom-sm-l-desc').value.trim(),
@@ -1305,6 +1309,8 @@ export async function renderMbomSettingsPanel(target, context) {
         await loadAll();
       } catch (e) {
         showMbomToast(`Save failed: ${e.message}`, 'error');
+      } finally {
+        if (saveBtn) saveBtn.disabled = false;
       }
     };
 
@@ -1386,6 +1392,9 @@ export async function renderMbomSettingsPanel(target, context) {
       const rate = target.querySelector('#mbom-sm-m-rate').value;
       if (!name || !rate) return showMbomToast('Name and Hourly Rate are required', 'error');
 
+      const saveBtn = target.querySelector('#mbom-sm-save');
+      if (saveBtn) saveBtn.disabled = true;
+
       const payload = {
         name,
         description: target.querySelector('#mbom-sm-m-desc').value.trim(),
@@ -1407,6 +1416,8 @@ export async function renderMbomSettingsPanel(target, context) {
         await loadAll();
       } catch (e) {
         showMbomToast(`Save failed: ${e.message}`, 'error');
+      } finally {
+        if (saveBtn) saveBtn.disabled = false;
       }
     };
 
@@ -1433,10 +1444,17 @@ export async function renderMbomSettingsPanel(target, context) {
       return;
     }
 
+    // Keep any templates currently expanded in DOM open across re-render
+    container.querySelectorAll('.mbom-tmpl-card:not(.collapsed)').forEach(card => {
+      const id = card.id.replace('mbom-tmpl-card-', '');
+      if (id) expandedTemplateIds.add(String(id));
+    });
+
     container.innerHTML = templates.map(t => {
       const steps = t.steps || [];
+      const isExpanded = expandedTemplateIds.has(String(t.pk));
       return `
-        <div class="mbom-tmpl-card collapsed" id="mbom-tmpl-card-${t.pk}">
+        <div class="mbom-tmpl-card ${isExpanded ? '' : 'collapsed'}" id="mbom-tmpl-card-${t.pk}">
           <div class="mbom-tmpl-header" data-settings-action="toggle-template" data-pk="${t.pk}" style="cursor:pointer;user-select:none;">
             <div style="display:flex;align-items:center;gap:10px;">
               <span class="mbom-tmpl-chevron" style="font-size:0.75rem;opacity:0.6;">▶</span>
@@ -1528,7 +1546,7 @@ export async function renderMbomSettingsPanel(target, context) {
         <td>
           <div class="mbom-actions">
             <button class="mbom-btn mbom-btn--icon mbom-btn--warning" data-settings-action="edit-step" data-tmpl-id="${tmpl.pk}" data-step-id="${s.pk}" title="Edit"><i class="fas fa-edit"></i></button>
-            <button class="mbom-btn mbom-btn--icon mbom-btn--danger" data-settings-action="delete-step" data-step-id="${s.pk}" title="Delete"><i class="fas fa-trash"></i></button>
+            <button class="mbom-btn mbom-btn--icon mbom-btn--danger" data-settings-action="delete-step" data-tmpl-id="${tmpl.pk}" data-step-id="${s.pk}" title="Delete"><i class="fas fa-trash"></i></button>
           </div>
         </td>
       </tr>
@@ -1557,6 +1575,9 @@ export async function renderMbomSettingsPanel(target, context) {
       const name = target.querySelector('#mbom-sm-t-name').value.trim();
       if (!name) return showMbomToast('Template name is required', 'error');
 
+      const saveBtn = target.querySelector('#mbom-sm-save');
+      if (saveBtn) saveBtn.disabled = true;
+
       const payload = {
         name,
         description: target.querySelector('#mbom-sm-t-desc').value.trim(),
@@ -1565,16 +1586,20 @@ export async function renderMbomSettingsPanel(target, context) {
 
       try {
         if (isEdit) {
+          expandedTemplateIds.add(String(t.pk));
           await mbomApi(`/process-template/${t.pk}/`, { method: 'PUT', body: JSON.stringify(payload) });
           showMbomToast('Template updated');
         } else {
-          await mbomApi('/process-template/', { method: 'POST', body: JSON.stringify(payload) });
+          const res = await mbomApi('/process-template/', { method: 'POST', body: JSON.stringify(payload) });
+          if (res?.pk) expandedTemplateIds.add(String(res.pk));
           showMbomToast('Template created');
         }
         closeModal();
         await loadAll();
       } catch (e) {
         showMbomToast(`Save failed: ${e.message}`, 'error');
+      } finally {
+        if (saveBtn) saveBtn.disabled = false;
       }
     };
 
@@ -1584,6 +1609,7 @@ export async function renderMbomSettingsPanel(target, context) {
   async function deleteTemplate(pk) {
     if (!confirm('Are you sure you want to delete this process template and all its steps?')) return;
     try {
+      expandedTemplateIds.delete(String(pk));
       await mbomApi(`/process-template/${pk}/`, { method: 'DELETE' });
       showMbomToast('Template deleted');
       await loadAll();
@@ -1668,6 +1694,9 @@ export async function renderMbomSettingsPanel(target, context) {
       const laborVal = target.querySelector('#mbom-sm-s-labor').value;
       const machVal = target.querySelector('#mbom-sm-s-machine').value;
 
+      const saveBtn = target.querySelector('#mbom-sm-save');
+      if (saveBtn) saveBtn.disabled = true;
+
       const payload = {
         template: tmpl.pk,
         sequence_number: seq,
@@ -1681,6 +1710,7 @@ export async function renderMbomSettingsPanel(target, context) {
       };
 
       try {
+        expandedTemplateIds.add(String(tmpl.pk));
         if (isEdit) {
           await mbomApi(`/process-template-step/${step.pk}/`, { method: 'PUT', body: JSON.stringify(payload) });
           showMbomToast('Template step updated');
@@ -1692,14 +1722,17 @@ export async function renderMbomSettingsPanel(target, context) {
         await loadAll();
       } catch (e) {
         showMbomToast(`Save failed: ${e.message}`, 'error');
+      } finally {
+        if (saveBtn) saveBtn.disabled = false;
       }
     };
 
     modalBackdrop.classList.add('is-open', 'open');
   }
 
-  async function deleteStep(pk) {
+  async function deleteStep(tmplId, pk) {
     if (!confirm('Are you sure you want to delete this template step?')) return;
+    if (tmplId) expandedTemplateIds.add(String(tmplId));
     try {
       await mbomApi(`/process-template-step/${pk}/`, { method: 'DELETE' });
       showMbomToast('Template step deleted');
@@ -1734,7 +1767,14 @@ export async function renderMbomSettingsPanel(target, context) {
     if (act === 'refresh') loadAll();
     else if (act === 'toggle-template') {
       const card = target.querySelector(`#mbom-tmpl-card-${pk}`);
-      if (card) card.classList.toggle('collapsed');
+      if (card) {
+        card.classList.toggle('collapsed');
+        if (card.classList.contains('collapsed')) {
+          expandedTemplateIds.delete(String(pk));
+        } else {
+          expandedTemplateIds.add(String(pk));
+        }
+      }
     }
     else if (act === 'add-labor') openLaborModal(null);
     else if (act === 'edit-labor') openLaborModal(laborRates.find(r => r.pk == pk));
@@ -1743,18 +1783,24 @@ export async function renderMbomSettingsPanel(target, context) {
     else if (act === 'edit-machine') openMachineModal(machineCenters.find(m => m.pk == pk));
     else if (act === 'delete-machine') deleteMachineCenter(pk);
     else if (act === 'add-template') openTemplateModal(null);
-    else if (act === 'edit-template') openTemplateModal(templates.find(t => t.pk == pk));
+    else if (act === 'edit-template') {
+      expandedTemplateIds.add(String(pk));
+      openTemplateModal(templates.find(t => t.pk == pk));
+    }
     else if (act === 'delete-template') deleteTemplate(pk);
     else if (act === 'add-step') {
+      expandedTemplateIds.add(String(pk));
       const card = target.querySelector(`#mbom-tmpl-card-${pk}`);
       if (card) card.classList.remove('collapsed');
       openStepModal(templates.find(t => t.pk == pk), null);
     }
     else if (act === 'edit-step') {
-      const tmpl = templates.find(t => t.pk == actionEl.dataset.tmplId);
+      const tmplId = actionEl.dataset.tmplId;
+      if (tmplId) expandedTemplateIds.add(String(tmplId));
+      const tmpl = templates.find(t => t.pk == tmplId);
       openStepModal(tmpl, findStepInTemplate(tmpl, actionEl.dataset.stepId));
     }
-    else if (act === 'delete-step') deleteStep(actionEl.dataset.stepId);
+    else if (act === 'delete-step') deleteStep(actionEl.dataset.tmplId, actionEl.dataset.stepId);
     else if (act === 'close-modal') closeModal();
     else if (act === 'save-modal') {
       if (currentSaveHandler) currentSaveHandler();

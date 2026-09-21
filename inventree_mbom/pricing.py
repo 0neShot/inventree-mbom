@@ -307,9 +307,12 @@ class MbomPricingService:
         """
         from .models import RoutingOperation
 
+        rate_pk = getattr(rate_instance, "pk", rate_instance)
+        filter_field = rate_field if rate_field.endswith("_id") else f"{rate_field}_id"
+
         part_ids = list(
             RoutingOperation.objects
-            .filter(**{rate_field: rate_instance})
+            .filter(**{filter_field: rate_pk})
             .values_list('routing__part_id', flat=True)
             .distinct()
         )
@@ -319,7 +322,7 @@ class MbomPricingService:
 
         logger.info(
             'mBOM: Rate "%s" (pk=%s) changed → scheduling %d parts for pricing update',
-            rate_instance, rate_instance.pk, len(part_ids)
+            rate_instance, rate_pk, len(part_ids)
         )
 
         count = 0

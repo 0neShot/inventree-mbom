@@ -1,6 +1,9 @@
 """REST API views for the inventree-mbom plugin."""
 
+import logging
 from decimal import Decimal
+
+logger = logging.getLogger('inventree_mbom')
 
 from django.db import transaction
 from django.urls import path
@@ -63,8 +66,11 @@ class LaborRateDetail(MBomPermissionMixin, RetrieveUpdateDestroyAPI):
 
     def perform_update(self, serializer):
         instance = serializer.save()
-        from .pricing import MbomPricingService
-        MbomPricingService.schedule_for_affected_parts(instance, 'labor_rate')
+        try:
+            from .pricing import MbomPricingService
+            MbomPricingService.schedule_for_affected_parts(instance, 'labor_rate')
+        except Exception as exc:
+            logger.warning("mBOM: Error scheduling pricing updates for labor rate: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -87,8 +93,11 @@ class MachineCenterDetail(MBomPermissionMixin, RetrieveUpdateDestroyAPI):
 
     def perform_update(self, serializer):
         instance = serializer.save()
-        from .pricing import MbomPricingService
-        MbomPricingService.schedule_for_affected_parts(instance, 'machine_center')
+        try:
+            from .pricing import MbomPricingService
+            MbomPricingService.schedule_for_affected_parts(instance, 'machine_center')
+        except Exception as exc:
+            logger.warning("mBOM: Error scheduling pricing updates for machine center: %s", exc)
 
 
 # ---------------------------------------------------------------------------
