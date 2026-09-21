@@ -188,6 +188,7 @@ class PartRoutingSerializer(serializers.ModelSerializer):
     total_manufacturing_cost = serializers.SerializerMethodField()
     per_unit_manufacturing_cost = serializers.SerializerMethodField()
     total_co2_kg = serializers.SerializerMethodField()
+    updated_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = PartRouting
@@ -201,6 +202,8 @@ class PartRoutingSerializer(serializers.ModelSerializer):
             "notes",
             "created",
             "updated",
+            "updated_by",
+            "updated_by_name",
             # Computed
             "operations",
             "total_labor_cost",
@@ -209,7 +212,7 @@ class PartRoutingSerializer(serializers.ModelSerializer):
             "per_unit_manufacturing_cost",
             "total_co2_kg",
         ]
-        read_only_fields = ["pk", "created", "updated"]
+        read_only_fields = ["pk", "created", "updated", "updated_by", "updated_by_name"]
         extra_kwargs = {
             "part": {
                 "error_messages": {
@@ -217,6 +220,11 @@ class PartRoutingSerializer(serializers.ModelSerializer):
                 }
             }
         }
+
+    def get_updated_by_name(self, obj):
+        if obj.updated_by:
+            return obj.updated_by.get_full_name() or obj.updated_by.username
+        return None
 
     def get_operations(self, obj):
         top_level = obj.operations.filter(

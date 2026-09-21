@@ -15,6 +15,7 @@ Data model hierarchy:
 """
 
 from decimal import Decimal
+from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -346,6 +347,14 @@ class PartRouting(models.Model):
 
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name=_("Updated By"),
+    )
 
     def __str__(self):
         return f"Routing: {self.part}"

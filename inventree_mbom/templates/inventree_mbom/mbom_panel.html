@@ -28,6 +28,13 @@
              {% if part.locked %}disabled title="{% trans 'Part is locked' %}" style="width:64px;opacity:0.6;cursor:not-allowed;"{% else %}style="width:64px;"{% endif %}>
     </div>
 
+    <!-- Last modified timestamp & user -->
+    <div class="mbom-last-updated" id="mbom-last-updated" {% if not routing or not routing.updated %}style="display:none;"{% endif %} title="Last modified timestamp and user">
+      <i class="fas fa-history"></i>
+      <span class="mbom-last-updated-label">Last Changed:</span>
+      <span class="mbom-last-updated-value" id="mbom-last-updated-text">{% if routing and routing.updated %}{{ routing.updated|date:"Y-m-d H:i" }}{% if routing.updated_by %} · {{ routing.updated_by.get_full_name|default:routing.updated_by.username }}{% endif %}{% else %}—{% endif %}</span>
+    </div>
+
     <div class="mbom-toolbar-actions">
       <a class="mbom-btn mbom-btn--ghost"
          href="/web/settings/system/mbom-settings-panel" target="_blank"
@@ -315,6 +322,8 @@
   "partId": {{ part.pk }},
   "isLocked": {% if part.locked %}true{% else %}false{% endif %},
   "routingId": {% if routing %}{{ routing.pk }}{% else %}null{% endif %},
+  "updated": {% if routing and routing.updated %}"{{ routing.updated.isoformat }}"{% else %}null{% endif %},
+  "updatedBy": {% if routing and routing.updated_by %}"{{ routing.updated_by.get_full_name|default:routing.updated_by.username|escapejs }}"{% else %}null{% endif %},
   "pluginBase": "/plugin/inventree-mbom",
   "currency": "{{ currency|default:'EUR' }}",
   "batchSize": {{ routing.standard_batch_size|default:1 }},

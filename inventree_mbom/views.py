@@ -133,6 +133,20 @@ class ProcessTemplateStepDetail(MBomPermissionMixin, RetrieveUpdateDestroyAPI):
 # PartRouting endpoints
 # ---------------------------------------------------------------------------
 
+def touch_routing(routing, user=None):
+    """Touch a routing's updated timestamp and record the modifying user."""
+    if not routing:
+        return
+    from django.utils import timezone
+    routing.updated = timezone.now()
+    if user and user.is_authenticated:
+        routing.updated_by = user
+    try:
+        routing.save(update_fields=["updated", "updated_by"])
+    except Exception:
+        routing.save()
+
+
 class PartRoutingList(MBomPermissionMixin, ListCreateAPI):
     """List and create PartRouting instances."""
     serializer_class = PartRoutingSerializer
@@ -168,7 +182,8 @@ class PartRoutingList(MBomPermissionMixin, ListCreateAPI):
         if part and part.locked:
             from rest_framework.exceptions import ValidationError
             raise ValidationError("Part is locked. Routing creation is prohibited.")
-        instance = serializer.save()
+        user = self.request.user if (self.request and self.request.user.is_authenticated) else None
+        instance = serializer.save(updated_by=user)
         from .pricing import MbomPricingService
         MbomPricingService.sync_part_pricing(instance.part, instance.standard_batch_size)
 
@@ -182,7 +197,8 @@ class PartRoutingDetail(MBomPermissionMixin, RetrieveUpdateDestroyAPI):
         if serializer.instance.part.locked:
             from rest_framework.exceptions import ValidationError
             raise ValidationError("Part is locked. Routing modifications are prohibited.")
-        instance = serializer.save()
+        user = self.request.user if (self.request and self.request.user.is_authenticated) else None
+        instance = serializer.save(updated_by=user)
         from .pricing import MbomPricingService
         MbomPricingService.sync_part_pricing(instance.part, instance.standard_batch_size)
 
@@ -222,6 +238,8 @@ class RoutingOperationList(MBomPermissionMixin, ListCreateAPI):
             from rest_framework.exceptions import ValidationError
             raise ValidationError("Part is locked. Routing operations cannot be modified.")
         instance = serializer.save()
+        user = self.request.user if (self.request and self.request.user.is_authenticated) else None
+        touch_routing(instance.routing, user)
         from .pricing import MbomPricingService
         MbomPricingService.sync_part_pricing(instance.routing.part)
 
@@ -236,6 +254,8 @@ class RoutingOperationDetail(MBomPermissionMixin, RetrieveUpdateDestroyAPI):
             from rest_framework.exceptions import ValidationError
             raise ValidationError("Part is locked. Routing operations cannot be modified.")
         instance = serializer.save()
+        user = self.request.user if (self.request and self.request.user.is_authenticated) else None
+        touch_routing(instance.routing, user)
         from .pricing import MbomPricingService
         MbomPricingService.sync_part_pricing(instance.routing.part)
 
@@ -244,7 +264,10 @@ class RoutingOperationDetail(MBomPermissionMixin, RetrieveUpdateDestroyAPI):
             from rest_framework.exceptions import ValidationError
             raise ValidationError("Part is locked. Routing operations cannot be modified.")
         part = instance.routing.part
+        routing = instance.routing
         instance.delete()
+        user = self.request.user if (self.request and self.request.user.is_authenticated) else None
+        touch_routing(routing, user)
         from .pricing import MbomPricingService
         MbomPricingService.sync_part_pricing(part)
 
@@ -346,6 +369,9 @@ class ApplyTemplateView(APIView):
                 copy_steps(step.sub_steps.all(), parent_op=op)
 
         copy_steps(template.steps.filter(parent_step__isnull=True))
+
+        user = request.user if (request and request.user.is_authenticated) else None
+        touch_routing(routing, user)
 
         from .pricing import MbomPricingService
         MbomPricingService.sync_part_pricing(part, batch_size)

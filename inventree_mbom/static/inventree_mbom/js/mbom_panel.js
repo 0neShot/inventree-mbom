@@ -111,6 +111,8 @@ class MbomPanel {
     this.partId       = config.partId;
     this.isLocked     = !!config.isLocked;
     this.routingId    = config.routingId;
+    this.updated      = config.updated || null;
+    this.updatedBy    = config.updatedBy || null;
     this.pluginBase   = config.pluginBase || '/plugin/inventree-mbom';
     this.currency     = config.currency || 'EUR';
     this.batchSize    = config.batchSize || 1;
@@ -128,6 +130,37 @@ class MbomPanel {
   _csrf() { return getCsrfToken(); }
   api(path, opts = {}) { return mbomApi(path, opts, this.pluginBase); }
   toast(msg, type, dur) { showMbomToast(msg, type, dur); }
+
+  _updateLastModified(routing) {
+    const container = document.getElementById('mbom-last-updated');
+    const textEl = document.getElementById('mbom-last-updated-text');
+    if (!container || !textEl) return;
+
+    const updated = routing?.updated || this.updated;
+    const updatedBy = routing?.updated_by_name || routing?.updatedBy || this.updatedBy;
+
+    if (!updated) {
+      container.style.display = 'none';
+      return;
+    }
+
+    container.style.display = 'inline-flex';
+    let dateStr = '';
+    try {
+      const d = new Date(updated);
+      if (!isNaN(d.getTime())) {
+        const pad = (n) => String(n).padStart(2, '0');
+        dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      } else {
+        dateStr = String(updated).substring(0, 16).replace('T', ' ');
+      }
+    } catch (e) {
+      dateStr = String(updated);
+    }
+
+    const author = typeof updatedBy === 'string' ? updatedBy : (updatedBy?.username || '');
+    textEl.textContent = author ? `${dateStr} · ${author}` : dateStr;
+  }
 
   // ---------------------------------------------------------
   // Cost Summary
@@ -184,19 +217,20 @@ class MbomPanel {
   // Operations: Load & Render
   // ---------------------------------------------------------
   async loadOperations() {
-    if (!this.routingId) {
-      try {
-        const rList = await this.api(`/routing/?part=${this.partId}`);
-        const routings = Array.isArray(rList) ? rList : (rList.results || []);
-        if (routings.length > 0) {
-          this.routingId = routings[0].pk;
-          this.batchSize = routings[0].standard_batch_size || this.batchSize;
-          const batchEl = document.getElementById('mbom-batch-input');
-          if (batchEl) batchEl.value = this.batchSize;
-        }
-      } catch (e) {
-        console.warn('[mBOM] routing lookup error:', e);
+    try {
+      const rList = await this.api(`/routing/?part=${this.partId}`);
+      const routings = Array.isArray(rList) ? rList : (rList.results || []);
+      if (routings.length > 0) {
+        this.routingId = routings[0].pk;
+        this.batchSize = routings[0].standard_batch_size || this.batchSize;
+        this.updated = routings[0].updated;
+        this.updatedBy = routings[0].updated_by_name;
+        this._updateLastModified(routings[0]);
+        const batchEl = document.getElementById('mbom-batch-input');
+        if (batchEl && !this.isLocked) batchEl.value = this.batchSize;
       }
+    } catch (e) {
+      console.warn('[mBOM] routing lookup error:', e);
     }
 
     if (!this.routingId) {
@@ -1013,6 +1047,7 @@ class MbomPanel {
     }
 
     await this.loadCostSummary();
+    this._updateLastModified({ updated: this.updated, updated_by_name: this.updatedBy });
     await this.loadOperations();
   }
 }
