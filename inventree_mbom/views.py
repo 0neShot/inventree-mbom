@@ -636,6 +636,8 @@ class PartCostSummaryView(APIView):
                 "material_cost_max": str(cost["material_cost_max"]),
                 "labor_cost": str(cost["labor_cost"]),
                 "machine_cost": str(cost["machine_cost"]),
+                "overhead_percent": str(cost.get("overhead_percent", Decimal("0.00"))),
+                "overhead_cost": str(cost.get("overhead_cost", Decimal("0.00"))),
                 "manufacturing_cost": str(cost["mfg_cost"]),
                 "co2_kg": str(cost["co2_kg"]),
                 # Setup vs Run split
@@ -651,6 +653,9 @@ class PartCostSummaryView(APIView):
                 "per_unit_material": str(cost["per_unit_material_min"]),
                 "per_unit_labor": str(cost["per_unit_labor"]),
                 "per_unit_machine": str(cost["per_unit_machine"]),
+                "per_unit_overhead": str(
+                    cost.get("per_unit_overhead", Decimal("0.00"))
+                ),
                 "per_unit_manufacturing_cost": str(cost["per_unit_mfg"]),
                 "per_unit_total_cost": str(cost["per_unit_total_min"]),
                 "per_unit_total_cost_max": str(cost["per_unit_total_max"]),

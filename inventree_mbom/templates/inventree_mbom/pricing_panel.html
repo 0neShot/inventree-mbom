@@ -48,6 +48,7 @@
 .mbom-pricing-table .row-material td { color: var(--bs-info, #0dcaf0); }
 .mbom-pricing-table .row-labor   td { color: var(--bs-warning, #ffc107); font-weight: 500; }
 .mbom-pricing-table .row-machine td { color: #9b59b6; font-weight: 500; }
+.mbom-pricing-table .row-overhead td { color: #fd7e14; font-weight: 500; }
 .mbom-pricing-table .row-total   td {
   font-weight: 700;
   font-size: 0.9rem;
@@ -128,7 +129,7 @@
     <i class="fas fa-calculator"></i>
     {% trans "Assembly Cost Breakdown" %}
     <span style="font-size:0.72rem;font-weight:400;margin-left:auto;opacity:0.6;">
-      {% trans "batch" %} × {{ cost.batch_size }}
+      {% trans "batch" %} × {{ cost.batch_size }}{% if cost.overhead_percent and cost.overhead_percent > 0 %} · {% trans "overhead" %}: {{ cost.overhead_percent|floatformat:2 }}%{% endif %}
     </span>
   </div>
 
@@ -172,6 +173,18 @@
         <td>{{ cost.machine_cost|floatformat:4 }} EUR</td>
       </tr>
 
+      <!-- Overhead -->
+      {% if cost.overhead_percent and cost.overhead_percent > 0 %}
+      <tr class="row-overhead">
+        <td>
+          <i class="fas fa-percentage" style="width:14px;"></i>
+          {% trans "Overhead" %} ({{ cost.overhead_percent|floatformat:2 }}%)
+        </td>
+        <td>{{ cost.per_unit_overhead|floatformat:4 }} EUR</td>
+        <td>{{ cost.overhead_cost|floatformat:4 }} EUR</td>
+      </tr>
+      {% endif %}
+
       <!-- Total -->
       <tr class="row-total">
         <td>
@@ -200,6 +213,11 @@
       Costs shown for a standard batch of {{ size }} unit(s).
       Setup costs are amortised across the batch.
     {% endblocktrans %}
+    {% if cost.overhead_percent and cost.overhead_percent > 0 %}
+      {% blocktrans with pct=cost.overhead_percent|floatformat:2 %}
+        Includes {{ pct }}% general overhead factor on labor and machine.
+      {% endblocktrans %}
+    {% endif %}
   </div>
 
   <!-- Per-operation breakdown -->

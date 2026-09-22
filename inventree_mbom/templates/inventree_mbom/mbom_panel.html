@@ -28,6 +28,17 @@
              {% if part.locked %}disabled title="{% trans 'Part is locked' %}" style="width:64px;opacity:0.6;cursor:not-allowed;"{% else %}style="width:64px;"{% endif %}>
     </div>
 
+    <!-- Overhead percentage control -->
+    <div class="mbom-batch-info" style="margin-left:6px;">
+      <i class="fas fa-percentage" title="{% trans 'General overhead percentage on labor and machine costs' %}"></i>
+      <label for="mbom-overhead-input" style="margin:0;font-size:0.78rem;">{% trans "Overhead:" %}</label>
+      <input type="number" id="mbom-overhead-input"
+             value="{{ routing.overhead_percent|default:0 }}"
+             min="0" step="any"
+             {% if part.locked %}disabled title="{% trans 'Part is locked' %}" style="width:68px;opacity:0.6;cursor:not-allowed;"{% else %}style="width:68px;"{% endif %}>
+      <span style="font-size:0.75rem;opacity:0.7;">%</span>
+    </div>
+
     <!-- Last modified timestamp & user -->
     <div class="mbom-last-updated" id="mbom-last-updated" {% if not routing or not routing.updated %}style="display:none;"{% endif %} title="Last modified timestamp and user">
       <i class="fas fa-history"></i>
@@ -99,7 +110,7 @@
       </div>
       <div class="mbom-card__value loading" id="mbom-c-total">…</div>
       <div class="mbom-card__sub">
-        {% trans "batch" %}: <span id="mbom-batch-display">{{ routing.standard_batch_size|default:1 }}</span>
+        {% trans "batch" %}: <span id="mbom-batch-display">{{ routing.standard_batch_size|default:1 }}</span><span id="mbom-overhead-badge" {% if not routing.overhead_percent or routing.overhead_percent <= 0 %}style="display:none;"{% endif %}> · <span id="mbom-overhead-display">{{ routing.overhead_percent|floatformat:2|default:"0.00" }}</span>% overhead</span>
       </div>
     </div>
 
@@ -328,6 +339,7 @@
   "pluginBase": "/plugin/inventree-mbom",
   "currency": "{{ currency|default:'EUR' }}",
   "batchSize": {{ routing.standard_batch_size|default:1 }},
+  "overheadPercent": {{ routing.overhead_percent|default:0 }},
   "laborRates": [
     {% for lr in labor_rates %}
     {"pk": {{ lr.pk }}, "name": "{{ lr.name|escapejs }}", "hourly_rate": "{{ lr.hourly_rate }}", "currency": "{{ lr.currency }}"}{% if not forloop.last %},{% endif %}

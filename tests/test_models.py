@@ -204,6 +204,22 @@ try:
         def test_routing_co2(self):
             self.assertAlmostEqual(float(self.routing.total_co2_kg()), 0.05, places=6)
 
+        def test_routing_overhead_cost(self):
+            # Base = 50 + 100 = 150. With 10% overhead:
+            self.routing.overhead_percent = Decimal("10.00")
+            self.routing.save()
+            self.assertAlmostEqual(float(self.routing.overhead_factor), 1.10, places=4)
+            self.assertAlmostEqual(
+                float(self.routing.total_overhead_cost(10)), 15.00, places=4
+            )
+            self.assertAlmostEqual(
+                float(self.routing.total_manufacturing_cost(10)), 165.00, places=4
+            )
+            self.assertAlmostEqual(
+                float(self.routing.per_unit_manufacturing_cost()), 16.50, places=4
+            )
+            self.assertAlmostEqual(float(self.op.total_cost(10)), 165.00, places=4)
+
     class HierarchicalOperationsTest(TestCase):
         """Tests for parent/child operation hierarchy."""
 

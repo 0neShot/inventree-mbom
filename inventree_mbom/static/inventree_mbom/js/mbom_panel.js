@@ -116,6 +116,7 @@ class MbomPanel {
     this.pluginBase   = config.pluginBase || '/plugin/inventree-mbom';
     this.currency     = config.currency || 'EUR';
     this.batchSize    = config.batchSize || 1;
+    this.overheadPercent = parseFloat(config.overheadPercent || 0);
 
     // State
     this.ops          = [];
@@ -211,6 +212,15 @@ class MbomPanel {
     const batchEl = document.getElementById('mbom-batch-display');
     if (batchEl) batchEl.textContent = d.batch_size;
     this.batchSize = d.batch_size;
+
+    const rawOvh = d.overhead_percent !== undefined ? d.overhead_percent : this.overheadPercent;
+    const cleanOvh = String(rawOvh ?? '').replace(',', '.');
+    const ovhVal = parseFloat(cleanOvh) || 0;
+    const ovhEl = document.getElementById('mbom-overhead-display');
+    const ovhBadge = document.getElementById('mbom-overhead-badge');
+    if (ovhEl) ovhEl.textContent = fmt(ovhVal, 2);
+    if (ovhBadge) ovhBadge.style.display = (ovhVal > 0) ? 'inline' : 'none';
+    this.overheadPercent = ovhVal;
   }
 
   // ---------------------------------------------------------
@@ -223,11 +233,19 @@ class MbomPanel {
       if (routings.length > 0) {
         this.routingId = routings[0].pk;
         this.batchSize = routings[0].standard_batch_size || this.batchSize;
+        if (routings[0].overhead_percent !== undefined) {
+          const rawOvh = routings[0].overhead_percent;
+          this.overheadPercent = parseFloat(String(rawOvh).replace(',', '.')) || 0;
+        }
         this.updated = routings[0].updated;
         this.updatedBy = routings[0].updated_by_name;
         this._updateLastModified(routings[0]);
         const batchEl = document.getElementById('mbom-batch-input');
         if (batchEl && !this.isLocked) batchEl.value = this.batchSize;
+        const ovhInput = document.getElementById('mbom-overhead-input');
+        if (ovhInput && !this.isLocked && document.activeElement !== ovhInput) {
+          ovhInput.value = this.overheadPercent;
+        }
       }
     } catch (e) {
       console.warn('[mBOM] routing lookup error:', e);
@@ -1028,6 +1046,30 @@ class MbomPanel {
         });
       } catch (e) {
         console.warn('[mBOM] batch size save error:', e);
+      }
+    }
+    await this.loadCostSummary();
+    await this.loadOperations();
+  }
+
+  async updateOverheadPercent(newPercent) {
+    if (this.isLocked) {
+      this.toast('Part is locked. Changes are prohibited.', 'warning');
+      return;
+    }
+    const cleanStr = String(newPercent ?? '').trim().replace(',', '.');
+    const p = parseFloat(cleanStr);
+    if (isNaN(p) || p < 0) return;
+    this.overheadPercent = p;
+
+    if (this.routingId) {
+      try {
+        await this.api(`/routing/${this.routingId}/`, {
+          method: 'PATCH',
+          body: JSON.stringify({ overhead_percent: p }),
+        });
+      } catch (e) {
+        console.warn('[mBOM] overhead percent save error:', e);
       }
     }
     await this.loadCostSummary();
@@ -1907,7 +1949,7 @@ async function checkAndInjectPricing(partId) {
           </span>
         </div>
         <div style="display:flex;align-items:center;gap:12px;">
-          <span style="font-size:0.8rem;opacity:0.65;">Batch: ${data.batch_size}</span>
+          <span style="font-size:0.8rem;opacity:0.65;">Batch: ${data.batch_size}${parseFloat(data.overhead_percent || 0) > 0 ? ` · Overhead: ${parseFloat(data.overhead_percent).toFixed(2)}%` : ''}</span>
           <span class="mbom-accordion-chevron" id="mbom-pricing-chevron" style="font-size:0.82rem;transition:transform 0.2s ease;">▼</span>
         </div>
       </div>
@@ -1922,6 +1964,11 @@ async function checkAndInjectPricing(partId) {
             <div class="mbom-kpi__label">Machine Cost</div>
             <div class="mbom-kpi__val">${parseFloat(data.machine_cost || 0).toFixed(2)} ${cur}</div>
             <div class="mbom-kpi__sub">Setup: ${parseFloat(data.machine_setup_cost || 0).toFixed(2)} | Run: ${parseFloat(data.machine_run_cost || 0).toFixed(2)}</div>
+          </div>
+          <div class="mbom-kpi">
+            <div class="mbom-kpi__label">Overhead (${parseFloat(data.overhead_percent || 0).toFixed(2)}%)</div>
+            <div class="mbom-kpi__val" style="${parseFloat(data.overhead_percent || 0) > 0 ? 'color:#fd7e14;' : ''}">${parseFloat(data.overhead_cost || 0).toFixed(2)} ${cur}</div>
+            <div class="mbom-kpi__sub">${parseFloat(data.overhead_percent || 0) > 0 ? `Per unit: +${parseFloat(data.per_unit_overhead || 0).toFixed(4)} ${cur}` : 'No general overhead'}</div>
           </div>
           <div class="mbom-kpi">
             <div class="mbom-kpi__label">Setup vs Run</div>
@@ -1987,7 +2034,7 @@ async function checkAndInjectPricing(partId) {
 
         <div class="mbom-rollup-note" style="margin-top:12px;font-size:0.78rem;opacity:0.75;display:flex;align-items:center;gap:6px;">
           <span>ℹ️</span>
-          <span>mBOM manufacturing cost is rolled into the <strong>Overall Pricing</strong> card: Overall Cost = Material (eBOM) + Manufacturing (mBOM).</span>
+          <span>mBOM manufacturing cost is rolled into the <strong>Overall Pricing</strong> card: Overall Cost = Material (eBOM) + Manufacturing (mBOM)${parseFloat(data.overhead_percent || 0) > 0 ? ` (includes ${parseFloat(data.overhead_percent).toFixed(2)}% general overhead)` : ''}.</span>
         </div>
       </div>
     `;
@@ -2123,6 +2170,7 @@ export async function renderMbomPanel(target, context) {
         pluginBase: '/plugin/inventree-mbom',
         currency: 'EUR',
         batchSize: 50,
+        overheadPercent: 0,
         laborRates: [],
         machineCenters: [],
         templates: [],
@@ -2180,6 +2228,8 @@ export async function renderMbomPanel(target, context) {
       if (panel.isLocked) return;
       if (e.target.id === 'mbom-batch-input') {
         panel.updateBatchSize(e.target.value);
+      } else if (e.target.id === 'mbom-overhead-input') {
+        panel.updateOverheadPercent(e.target.value);
       } else if (e.target.matches('[data-inline-field]')) {
         const opRow = e.target.closest('[data-op-id]');
         if (opRow) {

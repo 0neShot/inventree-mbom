@@ -342,6 +342,16 @@ class PartRouting(models.Model):
         help_text=_("Used to amortise setup costs into per-unit cost"),
     )
 
+    # General overhead percentage applied to labor and machine costs
+    overhead_percent = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Overhead Percentage"),
+        help_text=_("General overhead percentage applied to labor and machine costs"),
+    )
+
     notes = models.TextField(
         blank=True,
         verbose_name=_("Notes"),
@@ -435,10 +445,22 @@ class PartRouting(models.Model):
             total += op.machine_cost(qty)
         return total
 
-    def total_manufacturing_cost(self, batch_size: int = None) -> Decimal:
-        """Total labor + machine cost for this routing."""
+    @property
+    def overhead_factor(self) -> Decimal:
+        """Multiplicative factor: 1 + (overhead_percent / 100)."""
+        return Decimal("1.00") + (self.overhead_percent / Decimal("100.00"))
+
+    def total_overhead_cost(self, batch_size: int = None) -> Decimal:
+        """Overhead cost applied to labor + machine: (labor + machine) * (overhead_percent / 100)."""
         qty = batch_size or self.standard_batch_size
-        return self.total_labor_cost(qty) + self.total_machine_cost(qty)
+        base = self.total_labor_cost(qty) + self.total_machine_cost(qty)
+        return base * (self.overhead_percent / Decimal("100.00"))
+
+    def total_manufacturing_cost(self, batch_size: int = None) -> Decimal:
+        """Total labor + machine + overhead cost for this routing."""
+        qty = batch_size or self.standard_batch_size
+        base = self.total_labor_cost(qty) + self.total_machine_cost(qty)
+        return base * self.overhead_factor
 
     def total_co2_kg(self, batch_size: int = None) -> Decimal:
         """Total CO₂ emissions in kg for this routing."""
@@ -610,9 +632,11 @@ class RoutingOperation(models.Model):
         return self.machine_setup_cost() + (self.machine_run_cost_per_unit() * qty)
 
     def total_cost(self, batch_size: int = None) -> Decimal:
-        """Combined labor + machine cost."""
+        """Combined labor + machine cost, scaled by routing overhead factor."""
         qty = batch_size or (self.routing.standard_batch_size if self.routing else 1)
-        return self.labor_cost(qty) + self.machine_cost(qty)
+        base = self.labor_cost(qty) + self.machine_cost(qty)
+        factor = self.routing.overhead_factor if self.routing else Decimal("1.00")
+        return base * factor
 
     def per_unit_cost(self, batch_size: int = None) -> Decimal:
         """Per-unit cost amortised over batch size."""

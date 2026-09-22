@@ -71,9 +71,12 @@ def get_mbom_unit_cost(part, batch_size: int = 1, _visited: set = None) -> dict:
     empty = {
         "labor_cost": Decimal("0.00"),
         "machine_cost": Decimal("0.00"),
+        "overhead_cost": Decimal("0.00"),
+        "overhead_percent": Decimal("0.00"),
         "mfg_cost": Decimal("0.00"),
         "per_unit_labor": Decimal("0.00"),
         "per_unit_machine": Decimal("0.00"),
+        "per_unit_overhead": Decimal("0.00"),
         "per_unit_mfg": Decimal("0.00"),
         "co2_kg": Decimal("0.000000"),
         "has_routing": False,
@@ -99,18 +102,25 @@ def get_mbom_unit_cost(part, batch_size: int = 1, _visited: set = None) -> dict:
 
         labor_cost = routing.total_labor_cost(batch_size)
         machine_cost = routing.total_machine_cost(batch_size)
-        mfg_cost = labor_cost + machine_cost
+        overhead_cost = routing.total_overhead_cost(batch_size)
+        mfg_cost = routing.total_manufacturing_cost(batch_size)
         co2_kg = routing.total_co2_kg(batch_size)
+        overhead_percent = routing.overhead_percent
 
         qty = Decimal(str(batch_size))
         return {
             "labor_cost": labor_cost,
             "machine_cost": machine_cost,
+            "overhead_cost": overhead_cost,
+            "overhead_percent": overhead_percent,
             "mfg_cost": mfg_cost,
             "per_unit_labor": (labor_cost / qty).quantize(
                 Decimal("0.000001"), rounding=ROUND_HALF_UP
             ),
             "per_unit_machine": (machine_cost / qty).quantize(
+                Decimal("0.000001"), rounding=ROUND_HALF_UP
+            ),
+            "per_unit_overhead": (overhead_cost / qty).quantize(
                 Decimal("0.000001"), rounding=ROUND_HALF_UP
             ),
             "per_unit_mfg": (mfg_cost / qty).quantize(
@@ -172,6 +182,8 @@ def get_assembly_full_cost(part, batch_size: int = 1) -> dict:
         "material_cost_max": material_max,
         "labor_cost": mfg["labor_cost"],
         "machine_cost": mfg["machine_cost"],
+        "overhead_cost": mfg.get("overhead_cost", Decimal("0.00")),
+        "overhead_percent": mfg.get("overhead_percent", Decimal("0.00")),
         "mfg_cost": mfg["mfg_cost"],
         "co2_kg": mfg["co2_kg"],
         # Per-unit breakdown
@@ -179,6 +191,7 @@ def get_assembly_full_cost(part, batch_size: int = 1) -> dict:
         "per_unit_material_max": per_unit_material_max,
         "per_unit_labor": mfg["per_unit_labor"],
         "per_unit_machine": mfg["per_unit_machine"],
+        "per_unit_overhead": mfg.get("per_unit_overhead", Decimal("0.00")),
         "per_unit_mfg": mfg["per_unit_mfg"],
         "per_unit_total_min": per_unit_total_min,
         "per_unit_total_max": per_unit_total_max,

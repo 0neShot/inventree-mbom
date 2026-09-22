@@ -187,6 +187,7 @@ class PartRoutingSerializer(serializers.ModelSerializer):
     # Summary cost fields
     total_labor_cost = serializers.SerializerMethodField()
     total_machine_cost = serializers.SerializerMethodField()
+    total_overhead_cost = serializers.SerializerMethodField()
     total_manufacturing_cost = serializers.SerializerMethodField()
     per_unit_manufacturing_cost = serializers.SerializerMethodField()
     total_co2_kg = serializers.SerializerMethodField()
@@ -201,6 +202,7 @@ class PartRoutingSerializer(serializers.ModelSerializer):
             "part_ipn",
             "source_template",
             "standard_batch_size",
+            "overhead_percent",
             "notes",
             "created",
             "updated",
@@ -210,6 +212,7 @@ class PartRoutingSerializer(serializers.ModelSerializer):
             "operations",
             "total_labor_cost",
             "total_machine_cost",
+            "total_overhead_cost",
             "total_manufacturing_cost",
             "per_unit_manufacturing_cost",
             "total_co2_kg",
@@ -239,6 +242,9 @@ class PartRoutingSerializer(serializers.ModelSerializer):
 
     def get_total_machine_cost(self, obj):
         return str(obj.total_machine_cost())
+
+    def get_total_overhead_cost(self, obj):
+        return str(obj.total_overhead_cost())
 
     def get_total_manufacturing_cost(self, obj):
         return str(obj.total_manufacturing_cost())
