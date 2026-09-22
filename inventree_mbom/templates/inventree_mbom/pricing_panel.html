@@ -234,20 +234,21 @@
         <strong>{{ op.name }}</strong>
         <br>
         <span style="opacity:0.55;font-size:0.72rem;">
-          {{ op.labor_rate_name }}
-          {% if op.machine_name != "—" %} / {{ op.machine_name }}{% endif %}
-          &bull; Setup {{ op.setup_time|floatformat:1 }}min
-          &bull; Cycle {{ op.cycle_time|floatformat:2 }}min/unit
           {% if op.sub_count > 0 %}
-            &bull; <em>+{{ op.sub_count }} sub-step(s)</em>
+            <em>{% trans "Description step" %} &bull; {{ op.sub_count }} {% trans "sub-step(s)" %}</em>
+          {% else %}
+            {{ op.labor_rate_name }}
+            {% if op.machine_name != "—" %} / {{ op.machine_name }}{% endif %}
+            &bull; Setup {{ op.setup_time|floatformat:1 }}min
+            &bull; Cycle {{ op.cycle_time|floatformat:2 }}min/unit
           {% endif %}
         </span>
       </div>
       <div style="opacity:0.55;font-size:0.72rem;text-align:right;">
-        /unit
+        {% if op.sub_count == 0 %}/unit{% endif %}
       </div>
       <div class="mbom-op-cost">
-        {{ op.per_unit_cost|floatformat:4 }} EUR
+        {% if op.sub_count > 0 %}<span style="opacity:0.4;">—</span>{% else %}{{ op.per_unit_cost|floatformat:4 }} EUR{% endif %}
       </div>
     </div>
     {% endfor %}

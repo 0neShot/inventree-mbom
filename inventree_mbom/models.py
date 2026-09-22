@@ -396,16 +396,25 @@ class PartRouting(models.Model):
 
     @property
     def total_setup_time_minutes(self) -> Decimal:
-        """Total setup time in minutes across all operations."""
+        """Total setup time in minutes across all operations (excluding parent description steps)."""
         return sum(
-            (op.setup_time_minutes for op in self.operations.all()), Decimal("0.0000")
+            (
+                op.setup_time_minutes
+                for op in self.operations.all()
+                if not op.sub_operations.exists()
+            ),
+            Decimal("0.0000"),
         )
 
     @property
     def total_run_time_per_unit_minutes(self) -> Decimal:
-        """Total run time in minutes per unit across all operations."""
+        """Total run time in minutes per unit across all operations (excluding parent description steps)."""
         return sum(
-            (op.run_time_per_unit_minutes for op in self.operations.all()),
+            (
+                op.run_time_per_unit_minutes
+                for op in self.operations.all()
+                if not op.sub_operations.exists()
+            ),
             Decimal("0.0000"),
         )
 
@@ -558,6 +567,13 @@ class RoutingOperation(models.Model):
 
     is_active = models.BooleanField(default=True, verbose_name=_("Active"))
 
+    @property
+    def is_parent_operation(self) -> bool:
+        """True if this operation has one or more sub-operations (acting as a description tool)."""
+        if self.pk:
+            return self.sub_operations.exists()
+        return False
+
     def save(self, *args, **kwargs):
         is_new = self.pk is None
         old_seq = None
@@ -571,7 +587,33 @@ class RoutingOperation(models.Model):
             except Exception:
                 pass
 
+        # Parent operations with sub-steps act strictly as description tools
+        if self.pk and self.sub_operations.exists():
+            self.labor_rate = None
+            self.machine_center = None
+            self.setup_time_minutes = Decimal("0.0000")
+            self.run_time_per_unit_minutes = Decimal("0.0000")
+
         super().save(*args, **kwargs)
+
+        # When a child operation is attached, clear any existing rates/times from the parent operation
+        if self.parent_operation_id:
+            try:
+                parent = self.parent_operation
+                if parent and (
+                    parent.labor_rate_id is not None
+                    or parent.machine_center_id is not None
+                    or parent.setup_time_minutes > Decimal("0.0000")
+                    or parent.run_time_per_unit_minutes > Decimal("0.0000")
+                ):
+                    RoutingOperation.objects.filter(pk=parent.pk).update(
+                        labor_rate=None,
+                        machine_center=None,
+                        setup_time_minutes=Decimal("0.0000"),
+                        run_time_per_unit_minutes=Decimal("0.0000"),
+                    )
+            except Exception:
+                pass
 
         # If a top-level operation's sequence changed, cascade prefix to its child sub-operations
         if (
@@ -606,46 +648,62 @@ class RoutingOperation(models.Model):
         return Decimal("0.00")
 
     def labor_setup_cost(self) -> Decimal:
-        """Fixed labor cost for setup (once per batch)."""
+        """Fixed labor cost for setup (once per batch). Parent description ops return 0."""
+        if self.is_parent_operation:
+            return Decimal("0.00")
         return self.setup_time_minutes * self._labor_rate_per_min()
 
     def labor_run_cost_per_unit(self) -> Decimal:
-        """Labor cost per unit produced."""
+        """Labor cost per unit produced. Parent description ops return 0."""
+        if self.is_parent_operation:
+            return Decimal("0.00")
         return self.run_time_per_unit_minutes * self._labor_rate_per_min()
 
     def labor_cost(self, batch_size: int = None) -> Decimal:
-        """Total labor cost for a given batch size."""
+        """Total labor cost for a given batch size. Parent description ops return 0."""
+        if self.is_parent_operation:
+            return Decimal("0.00")
         qty = batch_size or (self.routing.standard_batch_size if self.routing else 1)
         return self.labor_setup_cost() + (self.labor_run_cost_per_unit() * qty)
 
     def machine_setup_cost(self) -> Decimal:
-        """Fixed machine cost for setup (once per batch)."""
+        """Fixed machine cost for setup (once per batch). Parent description ops return 0."""
+        if self.is_parent_operation:
+            return Decimal("0.00")
         return self.setup_time_minutes * self._machine_rate_per_min()
 
     def machine_run_cost_per_unit(self) -> Decimal:
-        """Machine cost per unit produced."""
+        """Machine cost per unit produced. Parent description ops return 0."""
+        if self.is_parent_operation:
+            return Decimal("0.00")
         return self.run_time_per_unit_minutes * self._machine_rate_per_min()
 
     def machine_cost(self, batch_size: int = None) -> Decimal:
-        """Total machine cost for a given batch size."""
+        """Total machine cost for a given batch size. Parent description ops return 0."""
+        if self.is_parent_operation:
+            return Decimal("0.00")
         qty = batch_size or (self.routing.standard_batch_size if self.routing else 1)
         return self.machine_setup_cost() + (self.machine_run_cost_per_unit() * qty)
 
     def total_cost(self, batch_size: int = None) -> Decimal:
-        """Combined labor + machine cost, scaled by routing overhead factor."""
+        """Combined labor + machine cost, scaled by routing overhead factor. Parent ops return 0."""
+        if self.is_parent_operation:
+            return Decimal("0.00")
         qty = batch_size or (self.routing.standard_batch_size if self.routing else 1)
         base = self.labor_cost(qty) + self.machine_cost(qty)
         factor = self.routing.overhead_factor if self.routing else Decimal("1.00")
         return base * factor
 
     def per_unit_cost(self, batch_size: int = None) -> Decimal:
-        """Per-unit cost amortised over batch size."""
+        """Per-unit cost amortised over batch size. Parent ops return 0."""
+        if self.is_parent_operation:
+            return Decimal("0.00")
         qty = batch_size or (self.routing.standard_batch_size if self.routing else 1)
         return self.total_cost(qty) / Decimal(str(qty))
 
     def co2_kg(self, batch_size: int = None) -> Decimal:
-        """CO₂ emissions in kg for this operation."""
-        if not self.machine_center:
+        """CO₂ emissions in kg for this operation. Parent ops return 0."""
+        if self.is_parent_operation or not self.machine_center:
             return Decimal("0.000000")
         qty = batch_size or (self.routing.standard_batch_size if self.routing else 1)
         total_machine_minutes = self.setup_time_minutes + (

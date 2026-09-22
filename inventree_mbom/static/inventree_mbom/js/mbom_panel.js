@@ -417,6 +417,7 @@ class MbomPanel {
     }
 
     const subCount = (op.sub_operations || []).length;
+    const isParentWithChildren = !isChild && subCount > 0;
     const toggleBtn = (!isChild && subCount > 0)
       ? `<button class="mbom-expand-btn expanded" data-parent="${op.pk}" title="Toggle sub-steps">
            <i class="fas fa-caret-right"></i>
@@ -426,19 +427,23 @@ class MbomPanel {
     const seqBadge = `<span class="mbom-seq-badge">${op.sequence_number}</span>`;
     const indent   = isChild ? '<span class="mbom-indent"></span>' : '';
 
-    const laborChip = op.labor_rate
-      ? `<span class="mbom-chip mbom-chip--labor" title="Labor">
-           <i class="fas fa-user-hard-hat"></i>
-           ${this._rateName(op.labor_rate, 'labor')}
-         </span>`
-      : '<span style="opacity:0.3">—</span>';
+    const laborChip = isParentWithChildren
+      ? '<span style="opacity:0.35">—</span>'
+      : (op.labor_rate
+          ? `<span class="mbom-chip mbom-chip--labor" title="Labor">
+               <i class="fas fa-user-hard-hat"></i>
+               ${this._rateName(op.labor_rate, 'labor')}
+             </span>`
+          : '<span style="opacity:0.3">—</span>');
 
-    const machineChip = op.machine_center
-      ? `<span class="mbom-chip mbom-chip--machine" title="Machine">
-           <i class="fas fa-cog"></i>
-           ${this._rateName(op.machine_center, 'machine')}
-         </span>`
-      : '<span style="opacity:0.3">—</span>';
+    const machineChip = isParentWithChildren
+      ? '<span style="opacity:0.35">—</span>'
+      : (op.machine_center
+          ? `<span class="mbom-chip mbom-chip--machine" title="Machine">
+               <i class="fas fa-cog"></i>
+               ${this._rateName(op.machine_center, 'machine')}
+             </span>`
+          : '<span style="opacity:0.3">—</span>');
 
     const cost = parseFloat(op.per_unit_cost || 0).toFixed(4);
 
@@ -472,6 +477,18 @@ class MbomPanel {
                onfocus="this.style.border='1px solid var(--bs-primary,#0d6efd)';this.style.background='var(--bs-body-bg,#fff)';"
                onblur="this.style.border='1px solid transparent';this.style.background='transparent';">`;
 
+    const setupCell = isParentWithChildren
+      ? `<td style="text-align:right;opacity:0.35;" title="Parent description step">—</td>`
+      : `<td style="text-align:right;">${setupInput}</td>`;
+
+    const cycleCell = isParentWithChildren
+      ? `<td style="text-align:right;opacity:0.35;" title="Parent description step">—</td>`
+      : `<td style="text-align:right;">${cycleInput}</td>`;
+
+    const costCell = isParentWithChildren
+      ? `<td class="mbom-cost-cell" style="text-align:right;opacity:0.35;" title="Parent description step">—</td>`
+      : `<td class="mbom-cost-cell" style="text-align:right;">${cost} ${this.currency}</td>`;
+
     const actionsCell = this.isLocked
       ? `<td><span class="mbom-badge mbom-badge--locked" style="font-size:0.72rem;padding:2px 6px;"><i class="fas fa-lock"></i> Locked</span></td>`
       : `<td>
@@ -497,9 +514,9 @@ class MbomPanel {
       </td>
       <td class="col-hide-sm">${laborChip}</td>
       <td class="col-hide-sm">${machineChip}</td>
-      <td style="text-align:right;">${setupInput}</td>
-      <td style="text-align:right;">${cycleInput}</td>
-      <td class="mbom-cost-cell" style="text-align:right;">${cost} ${this.currency}</td>
+      ${setupCell}
+      ${cycleCell}
+      ${costCell}
       ${actionsCell}`;
 
     tbody.appendChild(row);
@@ -517,6 +534,11 @@ class MbomPanel {
   async inlineUpdateOp(opId, field, val) {
     if (this.isLocked) {
       this.toast('Part is locked. Changes are prohibited.', 'warning');
+      return;
+    }
+    const op = this._findOp(parseInt(opId));
+    if (op && (op.sub_operations || []).length > 0) {
+      this.toast('Parent operations cannot have setup or cycle times.', 'warning');
       return;
     }
     try {
@@ -828,6 +850,28 @@ class MbomPanel {
     this.showAddOpModal(parentOpId);
   }
 
+  _setParentModalMode(isParent) {
+    const notice = document.getElementById('mbom-parent-op-notice');
+    const laborSel = document.getElementById('mbom-op-labor');
+    const machSel  = document.getElementById('mbom-op-machine');
+    const setupEl  = document.getElementById('mbom-op-setup');
+    const cycleEl  = document.getElementById('mbom-op-cycle');
+
+    if (notice) notice.style.display = isParent ? 'block' : 'none';
+    [laborSel, machSel, setupEl, cycleEl].forEach(el => {
+      if (!el) return;
+      el.disabled = isParent;
+      el.style.opacity = isParent ? '0.45' : '1';
+      el.style.cursor = isParent ? 'not-allowed' : '';
+    });
+    if (isParent) {
+      if (laborSel) laborSel.value = '';
+      if (machSel) machSel.value = '';
+      if (setupEl) setupEl.value = '0';
+      if (cycleEl) cycleEl.value = '0';
+    }
+  }
+
   showEditOpModal(pk) {
     if (this.isLocked) {
       this.toast('Part is locked. Changes are prohibited.', 'warning');
@@ -850,15 +894,20 @@ class MbomPanel {
     const setupEl  = document.getElementById('mbom-op-setup');
     const cycleEl  = document.getElementById('mbom-op-cycle');
 
+    const isParent = (op.sub_operations || []).length > 0;
+    this._setParentModalMode(isParent);
+
     if (idEl) idEl.value = op.pk;
     if (seqEl) seqEl.value = op.sequence_number;
     if (nameEl) nameEl.value = op.name;
     if (descEl) descEl.value = op.description || '';
     if (parentSel) parentSel.value = op.parent_operation || '';
-    if (laborSel) laborSel.value = op.labor_rate || '';
-    if (machSel) machSel.value = op.machine_center || '';
-    if (setupEl) setupEl.value = op.setup_time_minutes;
-    if (cycleEl) cycleEl.value = op.run_time_per_unit_minutes;
+    if (!isParent) {
+      if (laborSel) laborSel.value = op.labor_rate || '';
+      if (machSel) machSel.value = op.machine_center || '';
+      if (setupEl) setupEl.value = op.setup_time_minutes;
+      if (cycleEl) cycleEl.value = op.run_time_per_unit_minutes;
+    }
 
     const backdrop = document.getElementById('mbom-op-backdrop');
     if (backdrop) backdrop.classList.add('is-open', 'open');
@@ -897,6 +946,8 @@ class MbomPanel {
     if (machSel) machSel.value = '';
     if (setupEl) setupEl.value = '0';
     if (cycleEl) cycleEl.value = '0';
+
+    this._setParentModalMode(false);
   }
 
   async saveOp() {
@@ -940,19 +991,22 @@ class MbomPanel {
       }
     }
 
+    const opId = idEl ? idEl.value : null;
+    const existingOp = opId ? this._findOp(parseInt(opId)) : null;
+    const isParent = existingOp && (existingOp.sub_operations || []).length > 0;
+
     const payload = {
       routing:                   this.routingId,
       sequence_number:           seqEl.value.trim(),
       name:                      nameEl.value.trim(),
       description:               descEl ? descEl.value.trim() : '',
       parent_operation:          (parentEl && parentEl.value) ? parseInt(parentEl.value) : null,
-      labor_rate:                (laborEl && laborEl.value)   ? parseInt(laborEl.value)  : null,
-      machine_center:            (machEl && machEl.value)     ? parseInt(machEl.value)   : null,
-      setup_time_minutes:        parseFloat(setupEl?.value || 0) || 0,
-      run_time_per_unit_minutes: parseFloat(cycleEl?.value || 0) || 0,
+      labor_rate:                isParent ? null : ((laborEl && laborEl.value)   ? parseInt(laborEl.value)  : null),
+      machine_center:            isParent ? null : ((machEl && machEl.value)     ? parseInt(machEl.value)   : null),
+      setup_time_minutes:        isParent ? 0 : (parseFloat(setupEl?.value || 0) || 0),
+      run_time_per_unit_minutes: isParent ? 0 : (parseFloat(cycleEl?.value || 0) || 0),
     };
 
-    const opId = idEl ? idEl.value : null;
     const isEdit = !!opId;
     const path = isEdit ? `/operation/${opId}/` : '/operation/';
     const method = isEdit ? 'PUT' : 'POST';
@@ -1905,6 +1959,8 @@ function syncPricingMount() {
     // Clean up if we navigated away from /pricing
     const existing = document.getElementById('mbom-pricing-accordion');
     if (existing) existing.remove();
+    const existingRow = document.getElementById('mbom-pricing-category-row');
+    if (existingRow) existingRow.remove();
     return;
   }
 
@@ -1915,148 +1971,397 @@ function syncPricingMount() {
 let isInjectingPricing = false;
 
 async function checkAndInjectPricing(partId) {
-  if (document.getElementById('mbom-pricing-accordion')) return;
+  const existingAcc = document.getElementById('mbom-pricing-accordion');
+  const existingRow = document.getElementById('mbom-pricing-category-row');
+  const hasAcc = !!(existingAcc && document.body.contains(existingAcc));
+  const hasRow = !!(existingRow && document.body.contains(existingRow));
+  if (hasAcc && hasRow) return;
   if (isInjectingPricing) return;
-
-  // Verify target is available in DOM before fetching
-  const targetAnchor = findBomPricingAnchor();
-  if (!targetAnchor) return;
 
   isInjectingPricing = true;
   try {
     const data = await mbomApi(`/cost-summary/${partId}/`);
     if (!data || !data.has_routing) return;
 
-    if (document.getElementById('mbom-pricing-accordion')) return;
+    // 1. Inject or re-inject "Manufacturing Pricing" row in the Pricing Category table
+    if (!hasRow) {
+      injectManufacturingPricingRow(data);
+    }
 
-    const curAnchor = findBomPricingAnchor();
-    if (!curAnchor) return;
-
-    const cur = data.currency || 'EUR';
-    const accordion = document.createElement('div');
-    accordion.id = 'mbom-pricing-accordion';
-    accordion.className = 'mantine-Accordion-item mbom-pricing-accordion';
-    accordion.setAttribute('data-value', 'mbom');
-    accordion.style.cssText = 'margin:12px 0;border:1px solid var(--bs-border-color,#dee2e6);border-radius:8px;overflow:hidden;background:var(--bs-body-bg,#fff);box-shadow:0 1px 3px rgba(0,0,0,0.05);';
-
-    accordion.innerHTML = `
-      <div class="mantine-Accordion-control mbom-accordion-header" id="mbom-pricing-toggle" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bs-secondary-bg,#f8f9fa);cursor:pointer;user-select:none;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-size:1.1rem;">⚙️</span>
-          <span style="font-weight:700;font-size:1.0rem;">mBOM Pricing</span>
-          <span class="mbom-badge mbom-badge--active" style="background:rgba(25,135,84,0.15);color:#198754;font-weight:600;padding:2px 9px;border-radius:12px;font-size:0.78rem;">
-            +${parseFloat(data.per_unit_manufacturing_cost || 0).toFixed(4)} ${cur} / unit
-          </span>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px;">
-          <span style="font-size:0.8rem;opacity:0.65;">Batch: ${data.batch_size}${parseFloat(data.overhead_percent || 0) > 0 ? ` · Overhead: ${parseFloat(data.overhead_percent).toFixed(2)}%` : ''}</span>
-          <span class="mbom-accordion-chevron" id="mbom-pricing-chevron" style="font-size:0.82rem;transition:transform 0.2s ease;">▼</span>
-        </div>
-      </div>
-      <div class="mantine-Accordion-panel mbom-accordion-body" id="mbom-pricing-body" style="padding:16px;border-top:1px solid var(--bs-border-color,#dee2e6);">
-        <div class="mbom-kpi-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px;">
-          <div class="mbom-kpi">
-            <div class="mbom-kpi__label">Labor Cost</div>
-            <div class="mbom-kpi__val">${parseFloat(data.labor_cost || 0).toFixed(2)} ${cur}</div>
-            <div class="mbom-kpi__sub">Setup: ${parseFloat(data.labor_setup_cost || 0).toFixed(2)} | Run: ${parseFloat(data.labor_run_cost || 0).toFixed(2)}</div>
-          </div>
-          <div class="mbom-kpi">
-            <div class="mbom-kpi__label">Machine Cost</div>
-            <div class="mbom-kpi__val">${parseFloat(data.machine_cost || 0).toFixed(2)} ${cur}</div>
-            <div class="mbom-kpi__sub">Setup: ${parseFloat(data.machine_setup_cost || 0).toFixed(2)} | Run: ${parseFloat(data.machine_run_cost || 0).toFixed(2)}</div>
-          </div>
-          <div class="mbom-kpi">
-            <div class="mbom-kpi__label">Overhead (${parseFloat(data.overhead_percent || 0).toFixed(2)}%)</div>
-            <div class="mbom-kpi__val" style="${parseFloat(data.overhead_percent || 0) > 0 ? 'color:#fd7e14;' : ''}">${parseFloat(data.overhead_cost || 0).toFixed(2)} ${cur}</div>
-            <div class="mbom-kpi__sub">${parseFloat(data.overhead_percent || 0) > 0 ? `Per unit: +${parseFloat(data.per_unit_overhead || 0).toFixed(4)} ${cur}` : 'No general overhead'}</div>
-          </div>
-          <div class="mbom-kpi">
-            <div class="mbom-kpi__label">Setup vs Run</div>
-            <div class="mbom-kpi__val">${parseFloat(data.setup_total || 0).toFixed(2)} / ${parseFloat(data.run_total || 0).toFixed(2)}</div>
-            <div class="mbom-kpi__sub">Setup split vs Run batch</div>
-          </div>
-          <div class="mbom-kpi">
-            <div class="mbom-kpi__label">CO₂ Equivalent</div>
-            <div class="mbom-kpi__val">${parseFloat(data.co2_kg || 0).toFixed(4)} kg</div>
-            <div class="mbom-kpi__sub">Batch footprint</div>
-          </div>
-          <div class="mbom-kpi">
-            <div class="mbom-kpi__label">Per-Unit Mfg</div>
-            <div class="mbom-kpi__val" style="color:#198754;">+${parseFloat(data.per_unit_manufacturing_cost || 0).toFixed(4)} ${cur}</div>
-            <div class="mbom-kpi__sub">Rolled into Overall Pricing</div>
-          </div>
-        </div>
-
-        ${data.operations && data.operations.length > 0 ? `
-          <div style="margin-top:12px;">
-            <div style="font-size:0.84rem;font-weight:600;margin-bottom:6px;opacity:0.85;">Operations Breakdown</div>
-            <div class="mbom-table-wrapper" style="overflow-x:auto;">
-              <table class="mbom-table" style="width:100%;font-size:0.82rem;">
-                <thead>
-                  <tr>
-                    <th style="width:60px;">Seq</th>
-                    <th>Operation</th>
-                    <th>Labor Class</th>
-                    <th>Machine Center</th>
-                    <th style="text-align:right;">Setup (min)</th>
-                    <th style="text-align:right;">Cycle (min)</th>
-                    <th style="text-align:right;">Unit Cost</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${data.operations.map(op => `
-                    <tr>
-                      <td><span class="mbom-seq-badge">${op.sequence_number}</span></td>
-                      <td><strong>${op.name}</strong></td>
-                      <td>${op.labor_rate_name}</td>
-                      <td>${op.machine_name}</td>
-                      <td style="text-align:right;">${parseFloat(op.setup_min || 0).toFixed(2)}</td>
-                      <td style="text-align:right;">${parseFloat(op.cycle_min || 0).toFixed(2)}</td>
-                      <td style="text-align:right;font-weight:600;">${parseFloat(op.per_unit_cost || 0).toFixed(4)} ${cur}</td>
-                    </tr>
-                    ${(op.sub_operations || []).map(sub => `
-                      <tr style="opacity:0.85;">
-                        <td style="padding-left:18px;">↳ <span class="mbom-seq-badge" style="font-size:0.75rem;">${sub.sequence_number}</span></td>
-                        <td>${sub.name}</td>
-                        <td>${sub.labor_rate_name}</td>
-                        <td>${sub.machine_name}</td>
-                        <td style="text-align:right;">${parseFloat(sub.setup_min || 0).toFixed(2)}</td>
-                        <td style="text-align:right;">${parseFloat(sub.cycle_min || 0).toFixed(2)}</td>
-                        <td style="text-align:right;">${parseFloat(sub.per_unit_cost || 0).toFixed(4)} ${cur}</td>
-                      </tr>
-                    `).join('')}
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ` : ''}
-
-        <div class="mbom-rollup-note" style="margin-top:12px;font-size:0.78rem;opacity:0.75;display:flex;align-items:center;gap:6px;">
-          <span>ℹ️</span>
-          <span>mBOM manufacturing cost is rolled into the <strong>Overall Pricing</strong> card: Overall Cost = Material (eBOM) + Manufacturing (mBOM)${parseFloat(data.overhead_percent || 0) > 0 ? ` (includes ${parseFloat(data.overhead_percent).toFixed(2)}% general overhead)` : ''}.</span>
-        </div>
-      </div>
-    `;
-
-    const toggle = accordion.querySelector('#mbom-pricing-toggle');
-    const chevron = accordion.querySelector('#mbom-pricing-chevron');
-    const body = accordion.querySelector('#mbom-pricing-body');
-    let open = true;
-    toggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      open = !open;
-      body.style.display = open ? 'block' : 'none';
-      chevron.style.transform = open ? 'rotate(0deg)' : 'rotate(-90deg)';
-    });
-
-    // Mount strictly directly after the BOM Pricing card
-    curAnchor.insertAdjacentElement('afterend', accordion);
+    // 2. Inject or re-inject "Manufacturing Pricing" accordion item below BOM Pricing
+    if (!hasAcc) {
+      injectManufacturingPricingAccordion(data);
+    }
   } catch (err) {
     console.warn('[mBOM] pricing injection notice:', err.message);
   } finally {
     isInjectingPricing = false;
   }
+}
+
+/**
+ * Helper to parse a formatted currency number from a table cell.
+ * E.g. "6,463389 €" -> 6.463389, "13,23 €" -> 13.23
+ */
+function parseCellNumber(cell) {
+  if (!cell) return 0;
+  const text = cell.textContent || '';
+  const cleaned = text.replace(/[^\d.,]/g, '').trim();
+  if (!cleaned) return 0;
+  let normalized = cleaned;
+  if (cleaned.includes(',') && !cleaned.includes('.')) {
+    normalized = cleaned.replace(',', '.');
+  } else if (cleaned.includes(',') && cleaned.includes('.')) {
+    if (cleaned.lastIndexOf(',') > cleaned.lastIndexOf('.')) {
+      normalized = cleaned.replace(/\./g, '').replace(',', '.');
+    } else {
+      normalized = cleaned.replace(/,/g, '');
+    }
+  }
+  const val = parseFloat(normalized);
+  return isNaN(val) ? 0 : val;
+}
+
+/**
+ * Format an amount to match the table's locale, currency symbol, and decimal precision.
+ */
+function formatPriceLikeTable(amount, sampleText, fallbackCurrency) {
+  const num = parseFloat(amount || 0);
+  const useComma = sampleText
+    ? (sampleText.includes(',') && !sampleText.includes('.')) || (sampleText.lastIndexOf(',') > sampleText.lastIndexOf('.'))
+    : false;
+
+  let symbol = fallbackCurrency || 'EUR';
+  if (sampleText) {
+    if (sampleText.includes('€')) symbol = '€';
+    else if (sampleText.includes('$')) symbol = '$';
+    else if (sampleText.includes('£')) symbol = '£';
+  } else if (symbol === 'EUR') {
+    symbol = '€';
+  } else if (symbol === 'USD') {
+    symbol = '$';
+  }
+
+  let decimals = 4;
+  if (sampleText) {
+    const match = sampleText.match(/[,\.](\d+)/);
+    if (match && match[1]) {
+      decimals = Math.min(Math.max(match[1].length, 2), 6);
+    }
+  }
+
+  let formatted = num.toFixed(decimals);
+  if (useComma) {
+    formatted = formatted.replace('.', ',');
+  }
+  return `${formatted}\u00A0${symbol}`;
+}
+
+/**
+ * Locate the Pricing Category table inside the Mantine Pricing overview accordion.
+ */
+function findPricingOverviewTable() {
+  const tables = document.querySelectorAll('table.mantine-datatable-table, table.mantine-Table-table, table');
+  for (const table of tables) {
+    const header = table.querySelector('thead');
+    if (header && header.textContent && header.textContent.includes('Pricing Category')) {
+      return table;
+    }
+    const body = table.querySelector('tbody');
+    if (body && (body.textContent.includes('Overall Pricing') || body.textContent.includes('BOM Pricing'))) {
+      return table;
+    }
+  }
+  return null;
+}
+
+/**
+ * Inject the "Manufacturing Pricing" row into the Pricing Category table.
+ */
+function injectManufacturingPricingRow(data) {
+  const existingRow = document.getElementById('mbom-pricing-category-row');
+  if (existingRow && document.body.contains(existingRow)) return;
+
+  const table = findPricingOverviewTable();
+  if (!table) return;
+
+  const tbody = table.querySelector('tbody');
+  if (!tbody) return;
+
+  // Find BOM Pricing row and Overall Pricing row
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  let bomRow = null;
+  let overallRow = null;
+
+  for (const row of rows) {
+    const text = row.cells[0]?.textContent || '';
+    if (text.includes('BOM Pricing')) {
+      bomRow = row;
+    } else if (text.includes('Overall Pricing')) {
+      overallRow = row;
+    }
+  }
+
+  // Derive styling classes from existing rows to match Mantine styling perfectly
+  const refRow = bomRow || overallRow;
+  const trClass = refRow ? refRow.className : 'mantine-Table-tr mantine-datatable-row';
+  const tdClass = (refRow && refRow.cells[0]) ? refRow.cells[0].className : 'mantine-Table-td';
+  const groupClass = refRow?.querySelector('.mantine-Group-root')?.className || 'mantine-Group-root';
+  const anchorClass = refRow?.querySelector('a')?.className || 'mantine-focus-auto mantine-Text-root mantine-Anchor-root';
+
+  const mfgCost = parseFloat(data.per_unit_manufacturing_cost || 0);
+  const sampleText = bomRow?.cells[1]?.textContent || overallRow?.cells[1]?.textContent || '';
+  const cur = data.currency || 'EUR';
+  const formattedMfg = formatPriceLikeTable(mfgCost, sampleText, cur);
+
+  const mfgRow = document.createElement('tr');
+  mfgRow.id = 'mbom-pricing-category-row';
+  mfgRow.className = trClass;
+  mfgRow.setAttribute('data-with-row-border', 'true');
+
+  mfgRow.innerHTML = `
+    <td class="${tdClass}">
+      <div style="--group-gap: var(--mantine-spacing-xs); --group-align: center; --group-justify: left; --group-wrap: wrap;" class="${groupClass}">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tabler-icon tabler-icon-tools" style="flex-shrink:0;">
+          <path d="M3 21h4l13 -13a1.5 1.5 0 0 0 -4 -4l-13 13v4"></path>
+          <line x1="14.5" y1="5.5" x2="18.5" y2="9.5"></line>
+          <polyline points="12 8 7 3 3 7 8 12"></polyline>
+          <line x1="7" y1="8" x2="5.5" y2="9.5"></line>
+          <polyline points="16 12 21 17 17 21 12 16"></polyline>
+          <line x1="16" y1="17" x2="14.5" y2="15.5"></line>
+        </svg>
+        <a id="mbom-pricing-category-link" style="font-weight: 700; cursor: pointer;" class="${anchorClass}" data-underline="hover">Manufacturing Pricing</a>
+      </div>
+    </td>
+    <td class="${tdClass}">${formattedMfg}</td>
+    <td class="${tdClass}">${formattedMfg}</td>
+  `;
+
+  // Click handler: scrolls and opens the Manufacturing Pricing accordion
+  const link = mfgRow.querySelector('#mbom-pricing-category-link');
+  if (link) {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const acc = document.getElementById('mbom-pricing-accordion');
+      if (acc) {
+        const body = acc.querySelector('#mbom-pricing-body');
+        const chevron = acc.querySelector('#mbom-pricing-chevron');
+        if (body && body.style.display === 'none') {
+          body.style.display = 'block';
+          if (chevron) chevron.style.transform = 'rotate(0deg)';
+        }
+        acc.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  }
+
+  // Insert after BOM Pricing row if present, otherwise after Overall Pricing, otherwise append
+  if (bomRow) {
+    bomRow.insertAdjacentElement('afterend', mfgRow);
+  } else if (overallRow) {
+    overallRow.insertAdjacentElement('afterend', mfgRow);
+  } else {
+    tbody.appendChild(mfgRow);
+  }
+
+  // Re-calculate the Overall Pricing row to ensure it equals the exact sum of all components
+  updateOverallPricingSum(tbody, overallRow, sampleText, cur);
+}
+
+/**
+ * Re-calculate the Overall Pricing row to ensure Overall Price = BOM + Manufacturing (+ Internal / other).
+ */
+function updateOverallPricingSum(tbody, overallRow, sampleText, cur) {
+  if (!overallRow || !tbody) return;
+
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  let sumMin = 0;
+  let sumMax = 0;
+  let count = 0;
+
+  for (const r of rows) {
+    if (r === overallRow) continue;
+    if (r.cells && r.cells.length >= 3) {
+      const minVal = parseCellNumber(r.cells[1]);
+      const maxVal = parseCellNumber(r.cells[2]) || minVal;
+      if (minVal > 0 || maxVal > 0) {
+        sumMin += minVal;
+        sumMax += maxVal;
+        count++;
+      }
+    }
+  }
+
+  if (count > 0 && overallRow.cells.length >= 3) {
+    const formattedMin = formatPriceLikeTable(sumMin, sampleText, cur);
+    const formattedMax = formatPriceLikeTable(sumMax, sampleText, cur);
+    if (overallRow.cells[1].innerHTML !== formattedMin) {
+      overallRow.cells[1].innerHTML = formattedMin;
+    }
+    if (overallRow.cells[2].innerHTML !== formattedMax) {
+      overallRow.cells[2].innerHTML = formattedMax;
+    }
+  }
+}
+
+/**
+ * Inject or re-inject the "Manufacturing Pricing" accordion item below BOM Pricing.
+ */
+function injectManufacturingPricingAccordion(data) {
+  const existing = document.getElementById('mbom-pricing-accordion');
+  if (existing && document.body.contains(existing)) return;
+
+  const curAnchor = findBomPricingAnchor();
+  if (!curAnchor) return;
+
+  const cur = data.currency || 'EUR';
+  let totalSetupMin = 0;
+  let totalCycleMin = 0;
+  let totalUnitCost = 0;
+  (data.operations || []).forEach(op => {
+    const hasSubs = (op.sub_operations || []).length > 0;
+    if (!hasSubs) {
+      totalSetupMin += parseFloat(op.setup_min || 0);
+      totalCycleMin += parseFloat(op.cycle_min || 0);
+      totalUnitCost += parseFloat(op.per_unit_cost || 0);
+    }
+    (op.sub_operations || []).forEach(sub => {
+      totalSetupMin += parseFloat(sub.setup_min || 0);
+      totalCycleMin += parseFloat(sub.cycle_min || 0);
+      totalUnitCost += parseFloat(sub.per_unit_cost || 0);
+    });
+  });
+  const displayTotalUnitCost = data.per_unit_manufacturing_cost !== undefined ? parseFloat(data.per_unit_manufacturing_cost).toFixed(4) : totalUnitCost.toFixed(4);
+
+  const accordion = document.createElement('div');
+  accordion.id = 'mbom-pricing-accordion';
+  accordion.className = 'mantine-Accordion-item mbom-pricing-accordion';
+  accordion.setAttribute('data-value', 'mbom');
+  accordion.style.cssText = 'margin:12px 0;border:1px solid var(--bs-border-color,#dee2e6);border-radius:8px;overflow:hidden;background:var(--bs-body-bg,#fff);box-shadow:0 1px 3px rgba(0,0,0,0.05);';
+
+  accordion.innerHTML = `
+    <div class="mantine-Accordion-control mbom-accordion-header" id="mbom-pricing-toggle" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bs-secondary-bg,#f8f9fa);cursor:pointer;user-select:none;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:1.1rem;">⚙️</span>
+        <span style="font-weight:700;font-size:1.0rem;">Manufacturing Pricing</span>
+        <span class="mbom-badge mbom-badge--active" style="background:rgba(25,135,84,0.15);color:#198754;font-weight:600;padding:2px 9px;border-radius:12px;font-size:0.78rem;">
+          +${parseFloat(data.per_unit_manufacturing_cost || 0).toFixed(4)} ${cur} / unit
+        </span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="font-size:0.8rem;opacity:0.65;">Batch: ${data.batch_size}${parseFloat(data.overhead_percent || 0) > 0 ? ` · Overhead: ${parseFloat(data.overhead_percent).toFixed(2)}%` : ''}</span>
+        <span class="mbom-accordion-chevron" id="mbom-pricing-chevron" style="font-size:0.82rem;transition:transform 0.2s ease;">▼</span>
+      </div>
+    </div>
+    <div class="mantine-Accordion-panel mbom-accordion-body" id="mbom-pricing-body" style="padding:16px;border-top:1px solid var(--bs-border-color,#dee2e6);">
+      <div class="mbom-kpi-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px;">
+        <div class="mbom-kpi">
+          <div class="mbom-kpi__label">Labor Cost</div>
+          <div class="mbom-kpi__val">${parseFloat(data.labor_cost || 0).toFixed(2)} ${cur}</div>
+          <div class="mbom-kpi__sub">Setup: ${parseFloat(data.labor_setup_cost || 0).toFixed(2)} | Run: ${parseFloat(data.labor_run_cost || 0).toFixed(2)}</div>
+        </div>
+        <div class="mbom-kpi">
+          <div class="mbom-kpi__label">Machine Cost</div>
+          <div class="mbom-kpi__val">${parseFloat(data.machine_cost || 0).toFixed(2)} ${cur}</div>
+          <div class="mbom-kpi__sub">Setup: ${parseFloat(data.machine_setup_cost || 0).toFixed(2)} | Run: ${parseFloat(data.machine_run_cost || 0).toFixed(2)}</div>
+        </div>
+        <div class="mbom-kpi">
+          <div class="mbom-kpi__label">Overhead (${parseFloat(data.overhead_percent || 0).toFixed(2)}%)</div>
+          <div class="mbom-kpi__val" style="${parseFloat(data.overhead_percent || 0) > 0 ? 'color:#fd7e14;' : ''}">${parseFloat(data.overhead_cost || 0).toFixed(2)} ${cur}</div>
+          <div class="mbom-kpi__sub">${parseFloat(data.overhead_percent || 0) > 0 ? `Per unit: +${parseFloat(data.per_unit_overhead || 0).toFixed(4)} ${cur}` : 'No general overhead'}</div>
+        </div>
+        <div class="mbom-kpi">
+          <div class="mbom-kpi__label">Setup vs Run</div>
+          <div class="mbom-kpi__val">${parseFloat(data.setup_total || 0).toFixed(2)} / ${parseFloat(data.run_total || 0).toFixed(2)} ${cur}</div>
+          <div class="mbom-kpi__sub">Setup split vs Run batch</div>
+        </div>
+        <div class="mbom-kpi">
+          <div class="mbom-kpi__label">CO₂ Equivalent</div>
+          <div class="mbom-kpi__val">${parseFloat(data.co2_kg || 0).toFixed(4)} kg</div>
+          <div class="mbom-kpi__sub">Batch footprint</div>
+        </div>
+        <div class="mbom-kpi">
+          <div class="mbom-kpi__label">Per-Unit Mfg</div>
+          <div class="mbom-kpi__val" style="color:#198754;">+${parseFloat(data.per_unit_manufacturing_cost || 0).toFixed(4)} ${cur}</div>
+          <div class="mbom-kpi__sub">Rolled into Overall Pricing</div>
+        </div>
+      </div>
+
+      ${data.operations && data.operations.length > 0 ? `
+        <div style="margin-top:12px;">
+          <div style="font-size:0.84rem;font-weight:600;margin-bottom:6px;opacity:0.85;">Operations Breakdown</div>
+          <div class="mbom-table-wrapper" style="overflow-x:auto;">
+            <table class="mbom-table" style="width:100%;font-size:0.82rem;">
+              <thead>
+                <tr>
+                  <th style="width:60px;">Seq</th>
+                  <th>Operation</th>
+                  <th>Labor Class</th>
+                  <th>Machine Center</th>
+                  <th style="text-align:right;">Setup (min)</th>
+                  <th style="text-align:right;">Cycle (min)</th>
+                  <th style="text-align:right;">Unit Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${data.operations.map(op => {
+                  const hasSubs = (op.sub_operations || []).length > 0;
+                  return `
+                  <tr style="${hasSubs ? 'background:rgba(0,0,0,0.02);font-weight:600;' : ''}">
+                    <td><span class="mbom-seq-badge">${op.sequence_number}</span></td>
+                    <td><strong>${op.name}</strong></td>
+                    <td style="${hasSubs ? 'opacity:0.4;' : ''}">${hasSubs ? '—' : op.labor_rate_name}</td>
+                    <td style="${hasSubs ? 'opacity:0.4;' : ''}">${hasSubs ? '—' : op.machine_name}</td>
+                    <td style="text-align:right;${hasSubs ? 'opacity:0.4;' : ''}">${hasSubs ? '—' : parseFloat(op.setup_min || 0).toFixed(2)}</td>
+                    <td style="text-align:right;${hasSubs ? 'opacity:0.4;' : ''}">${hasSubs ? '—' : parseFloat(op.cycle_min || 0).toFixed(2)}</td>
+                    <td style="text-align:right;${hasSubs ? 'opacity:0.4;' : 'font-weight:600;'}">${hasSubs ? '—' : `${parseFloat(op.per_unit_cost || 0).toFixed(4)} ${cur}`}</td>
+                  </tr>
+                  ${(op.sub_operations || []).map(sub => `
+                    <tr style="opacity:0.85;">
+                      <td style="padding-left:18px;">↳ <span class="mbom-seq-badge" style="font-size:0.75rem;">${sub.sequence_number}</span></td>
+                      <td>${sub.name}</td>
+                      <td>${sub.labor_rate_name}</td>
+                      <td>${sub.machine_name}</td>
+                      <td style="text-align:right;">${parseFloat(sub.setup_min || 0).toFixed(2)}</td>
+                      <td style="text-align:right;">${parseFloat(sub.cycle_min || 0).toFixed(2)}</td>
+                      <td style="text-align:right;font-weight:600;">${parseFloat(sub.per_unit_cost || 0).toFixed(4)} ${cur}</td>
+                    </tr>
+                  `).join('')}
+                `;
+                }).join('')}
+              </tbody>
+              <tfoot>
+                <tr style="font-weight:700;border-top:2px solid var(--bs-border-color,#dee2e6);background:var(--bs-secondary-bg,#f8f9fa);">
+                  <td colspan="4" style="text-align:right;padding:6px 8px;">Total:</td>
+                  <td style="text-align:right;padding:6px 8px;">${totalSetupMin.toFixed(2)} min</td>
+                  <td style="text-align:right;padding:6px 8px;">${totalCycleMin.toFixed(2)} min</td>
+                  <td style="text-align:right;padding:6px 8px;color:#198754;">${displayTotalUnitCost} ${cur}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      ` : ''}
+
+      <div class="mbom-rollup-note" style="margin-top:12px;font-size:0.78rem;opacity:0.75;display:flex;align-items:center;gap:6px;">
+        <span>ℹ️</span>
+        <span>mBOM manufacturing cost is rolled into the <strong>Overall Pricing</strong> card: Overall Cost = Material (eBOM) + Manufacturing (mBOM)${parseFloat(data.overhead_percent || 0) > 0 ? ` (includes ${parseFloat(data.overhead_percent).toFixed(2)}% general overhead)` : ''}.</span>
+      </div>
+    </div>
+  `;
+
+  const toggle = accordion.querySelector('#mbom-pricing-toggle');
+  const chevron = accordion.querySelector('#mbom-pricing-chevron');
+  const body = accordion.querySelector('#mbom-pricing-body');
+  let open = true;
+  toggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    open = !open;
+    body.style.display = open ? 'block' : 'none';
+    chevron.style.transform = open ? 'rotate(0deg)' : 'rotate(-90deg)';
+  });
+
+  curAnchor.insertAdjacentElement('afterend', accordion);
 }
 
 /**

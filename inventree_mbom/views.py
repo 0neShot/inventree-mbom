@@ -605,18 +605,30 @@ class PartCostSummaryView(APIView):
                         }
                     )
 
+                has_subs = op.sub_operations.filter(is_active=True).exists()
                 operations_data.append(
                     {
                         "pk": op.pk,
                         "sequence_number": op.sequence_number,
                         "name": op.name,
-                        "labor_rate_name": op.labor_rate.name if op.labor_rate else "—",
-                        "machine_name": (
-                            op.machine_center.name if op.machine_center else "—"
+                        "is_parent": has_subs,
+                        "labor_rate_name": (
+                            "—"
+                            if has_subs
+                            else (op.labor_rate.name if op.labor_rate else "—")
                         ),
-                        "setup_min": float(op.setup_time_minutes),
-                        "cycle_min": float(op.run_time_per_unit_minutes),
-                        "per_unit_cost": str(op.per_unit_cost(batch_size)),
+                        "machine_name": (
+                            "—"
+                            if has_subs
+                            else (op.machine_center.name if op.machine_center else "—")
+                        ),
+                        "setup_min": 0.0 if has_subs else float(op.setup_time_minutes),
+                        "cycle_min": (
+                            0.0 if has_subs else float(op.run_time_per_unit_minutes)
+                        ),
+                        "per_unit_cost": (
+                            "0.0000" if has_subs else str(op.per_unit_cost(batch_size))
+                        ),
                         "sub_operations": sub_ops_data,
                     }
                 )

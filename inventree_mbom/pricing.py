@@ -259,7 +259,6 @@ class MbomPricingService:
         """
         try:
             from part.models import PartPricing
-            from djmoney.money import Money
             from .models import PartRouting
 
             if isinstance(part, (int, str)):
@@ -290,8 +289,17 @@ class MbomPricingService:
             mfg_unit = cost_data["per_unit_mfg"]
 
             # Total = BOM Material + mBOM Manufacturing
-            total_min = bom_min + mfg_unit
-            total_max = (bom_max if bom_max > Decimal("0.00") else bom_min) + mfg_unit
+            # Include internal pricing or other active components
+            internal_min = _to_decimal(pricing.internal_cost_min)
+            internal_max = _to_decimal(pricing.internal_cost_max)
+
+            int_max_val = (
+                internal_max if internal_max > Decimal("0.00") else internal_min
+            )
+            bom_max_val = bom_max if bom_max > Decimal("0.00") else bom_min
+
+            total_min = bom_min + mfg_unit + internal_min
+            total_max = bom_max_val + mfg_unit + int_max_val
 
             PartPricing.objects.filter(part_id=part.pk).update(
                 overall_min=total_min,

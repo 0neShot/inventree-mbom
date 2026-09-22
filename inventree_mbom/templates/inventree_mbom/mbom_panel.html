@@ -243,6 +243,9 @@
     <div class="mbom-dialog__body">
       <input type="hidden" id="mbom-op-id">
       <div class="mbom-form-grid">
+        <div id="mbom-parent-op-notice" style="display:none;grid-column:1 / -1;padding:8px 12px;background:rgba(13,110,253,0.08);border:1px solid rgba(13,110,253,0.25);border-radius:6px;font-size:0.78rem;color:var(--bs-primary,#0d6efd);">
+          <i class="fas fa-info-circle"></i> {% trans "This operation has sub-steps and acts as a description tool. Resources and cycle times are defined on its sub-steps." %}
+        </div>
 
         <div class="mbom-field">
           <label>{% trans "Sequence Number" %} *</label>

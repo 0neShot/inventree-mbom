@@ -270,13 +270,21 @@ try:
         def test_parent_has_child_in_sub_operations(self):
             self.assertIn(self.child_op, self.parent_op.sub_operations.all())
 
+        def test_parent_operation_is_description_only(self):
+            # Parent operation should act strictly as description tool without cost
+            self.parent_op.refresh_from_db()
+            self.assertTrue(self.parent_op.is_parent_operation)
+            self.assertIsNone(self.parent_op.labor_rate)
+            self.assertEqual(self.parent_op.labor_cost(1), Decimal("0.00"))
+            self.assertEqual(self.parent_op.machine_cost(1), Decimal("0.00"))
+            self.assertEqual(self.parent_op.total_cost(1), Decimal("0.00"))
+
         def test_routing_aggregates_all_operations(self):
-            # Routing total should include BOTH parent and child ops
-            # Parent: setup(10) + run(5*1) = 15 labor
+            # Routing total should only include child op (parent is description tool)
             # Child:  setup(2)  + run(1*1) = 3  labor
-            # Total: 18
+            # Total: 3
             # labor rate = 60/hr = 1/min
-            expected = (10 + 5 + 2 + 1) * 1.0  # = 18.00 EUR
+            expected = (2 + 1) * 1.0  # = 3.00 EUR
             self.assertAlmostEqual(
                 float(self.routing.total_labor_cost(1)), expected, places=4
             )
