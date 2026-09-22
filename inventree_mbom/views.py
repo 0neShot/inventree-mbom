@@ -605,13 +605,27 @@ class PartCostSummaryView(APIView):
                             "base_unit_cost": str(sub_base_cost),
                             "overhead_unit_cost": str(sub_overhead_cost),
                             "per_unit_cost": str(sub_total_cost),
+                            "co2_kg": str(sub.co2_kg(batch_size)),
+                            "per_unit_co2_kg": str(sub.co2_per_unit(batch_size)),
                         }
                     )
 
                 has_subs = op.sub_operations.filter(is_active=True).exists()
-                op_base_cost = Decimal("0.0000") if has_subs else op.base_per_unit_cost(batch_size)
-                op_overhead_cost = Decimal("0.0000") if has_subs else op.overhead_per_unit_cost(batch_size)
-                op_total_cost = Decimal("0.0000") if has_subs else op.per_unit_cost(batch_size)
+                op_base_cost = (
+                    Decimal("0.0000") if has_subs else op.base_per_unit_cost(batch_size)
+                )
+                op_overhead_cost = (
+                    Decimal("0.0000")
+                    if has_subs
+                    else op.overhead_per_unit_cost(batch_size)
+                )
+                op_total_cost = (
+                    Decimal("0.0000") if has_subs else op.per_unit_cost(batch_size)
+                )
+                op_co2 = Decimal("0.000000") if has_subs else op.co2_kg(batch_size)
+                op_per_unit_co2 = (
+                    Decimal("0.000000") if has_subs else op.co2_per_unit(batch_size)
+                )
 
                 operations_data.append(
                     {
@@ -636,6 +650,8 @@ class PartCostSummaryView(APIView):
                         "base_unit_cost": str(op_base_cost),
                         "overhead_unit_cost": str(op_overhead_cost),
                         "per_unit_cost": str(op_total_cost),
+                        "co2_kg": str(op_co2),
+                        "per_unit_co2_kg": str(op_per_unit_co2),
                         "sub_operations": sub_ops_data,
                     }
                 )

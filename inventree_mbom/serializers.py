@@ -126,6 +126,8 @@ class RoutingOperationSerializer(serializers.ModelSerializer):
     machine_setup_cost = serializers.SerializerMethodField()
     machine_run_cost_per_unit = serializers.SerializerMethodField()
     per_unit_cost = serializers.SerializerMethodField()
+    co2_kg = serializers.SerializerMethodField()
+    per_unit_co2_kg = serializers.SerializerMethodField()
 
     class Meta:
         model = RoutingOperation
@@ -148,6 +150,8 @@ class RoutingOperationSerializer(serializers.ModelSerializer):
             "machine_setup_cost",
             "machine_run_cost_per_unit",
             "per_unit_cost",
+            "co2_kg",
+            "per_unit_co2_kg",
         ]
         read_only_fields = ["pk"]
 
@@ -176,6 +180,12 @@ class RoutingOperationSerializer(serializers.ModelSerializer):
     def get_per_unit_cost(self, obj):
         return str(obj.per_unit_cost(self._batch_size(obj)))
 
+    def get_co2_kg(self, obj):
+        return str(obj.co2_kg(self._batch_size(obj)))
+
+    def get_per_unit_co2_kg(self, obj):
+        return str(obj.co2_per_unit(self._batch_size(obj)))
+
 
 class PartRoutingSerializer(serializers.ModelSerializer):
     """Serializer for PartRouting with full cost summary."""
@@ -191,6 +201,7 @@ class PartRoutingSerializer(serializers.ModelSerializer):
     total_manufacturing_cost = serializers.SerializerMethodField()
     per_unit_manufacturing_cost = serializers.SerializerMethodField()
     total_co2_kg = serializers.SerializerMethodField()
+    per_unit_co2_kg = serializers.SerializerMethodField()
     updated_by_name = serializers.SerializerMethodField()
 
     class Meta:
@@ -216,6 +227,7 @@ class PartRoutingSerializer(serializers.ModelSerializer):
             "total_manufacturing_cost",
             "per_unit_manufacturing_cost",
             "total_co2_kg",
+            "per_unit_co2_kg",
         ]
         read_only_fields = ["pk", "created", "updated", "updated_by", "updated_by_name"]
         extra_kwargs = {
@@ -254,6 +266,9 @@ class PartRoutingSerializer(serializers.ModelSerializer):
 
     def get_total_co2_kg(self, obj):
         return str(obj.total_co2_kg())
+
+    def get_per_unit_co2_kg(self, obj):
+        return str(obj.per_unit_co2_kg())
 
 
 class ApplyTemplateSerializer(serializers.Serializer):

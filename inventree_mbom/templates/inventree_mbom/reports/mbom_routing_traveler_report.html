@@ -295,6 +295,10 @@
     <div class="metric-val" style="color:#fd7e14;">{{ routing.total_overhead_cost|floatformat:2 }} <small style="font-size:8pt;font-weight:normal;">EUR</small></div>
   </div>
   {% endif %}
+  <div class="metric-card">
+    <div class="metric-title">{% trans "CO₂ / Unit" %}</div>
+    <div class="metric-val" style="color:#27ae60;">{{ routing.per_unit_co2_kg|floatformat:4 }} <small style="font-size:8pt;font-weight:normal;">kg</small></div>
+  </div>
   <div class="metric-card accent">
     <div class="metric-title">{% trans "Mfg Cost / Unit" %}</div>
     <div class="metric-val">{{ routing.per_unit_manufacturing_cost|floatformat:2 }} <small style="font-size:8pt;font-weight:normal;">EUR</small></div>
@@ -307,14 +311,15 @@
     <tr>
       <th style="width: 45px;">{% trans "Seq" %}</th>
       <th>{% trans "Operation / Instructions" %}</th>
-      <th style="width: 110px;">{% trans "Workcenter / Machine" %}</th>
-      <th style="width: 100px;">{% trans "Labor Role" %}</th>
-      <th style="width: 55px;" class="col-right">{% trans "Setup" %}</th>
-      <th style="width: 60px;" class="col-right">{% trans "Cycle" %}</th>
-      <th style="width: 65px;" class="col-right">{% trans "Price" %}</th>
-      <th style="width: 65px;" class="col-right">{% trans "Overhead" %}</th>
-      <th style="width: 75px;" class="col-right">{% trans "Total Unit Cost" %}</th>
-      <th class="col-center" style="width: 55px;">{% trans "Sign-Off" %}</th>
+      <th style="width: 105px;">{% trans "Workcenter / Machine" %}</th>
+      <th style="width: 95px;">{% trans "Labor Role" %}</th>
+      <th style="width: 50px;" class="col-right">{% trans "Setup" %}</th>
+      <th style="width: 55px;" class="col-right">{% trans "Cycle" %}</th>
+      <th style="width: 60px;" class="col-right">{% trans "Price" %}</th>
+      <th style="width: 60px;" class="col-right">{% trans "Overhead" %}</th>
+      <th style="width: 70px;" class="col-right">{% trans "Total Unit Cost" %}</th>
+      <th style="width: 60px;" class="col-right" title="Estimated CO₂ footprint per unit">{% trans "CO₂ / Unit" %}</th>
+      <th class="col-center" style="width: 50px;">{% trans "Sign-Off" %}</th>
     </tr>
   </thead>
   <tbody>
@@ -350,6 +355,7 @@
       <td class="col-right">{% if op.is_parent_operation %}<span style="opacity:0.4;">—</span>{% else %}{{ op.base_per_unit_cost|floatformat:4 }}{% endif %}</td>
       <td class="col-right">{% if op.is_parent_operation %}<span style="opacity:0.4;">—</span>{% else %}{{ op.overhead_per_unit_cost|floatformat:4 }}{% endif %}</td>
       <td class="col-right">{% if op.is_parent_operation %}<span style="opacity:0.4;">—</span>{% else %}<strong>{{ op.per_unit_cost|floatformat:4 }}</strong>{% endif %}</td>
+      <td class="col-right">{% if op.is_parent_operation %}<span style="opacity:0.4;">—</span>{% else %}{{ op.co2_per_unit|floatformat:4 }} kg{% endif %}</td>
       <td class="col-center"><span class="sign-box"></span></td>
     </tr>
 
@@ -384,6 +390,7 @@
       <td class="col-right">{{ sub.base_per_unit_cost|floatformat:4 }}</td>
       <td class="col-right">{{ sub.overhead_per_unit_cost|floatformat:4 }}</td>
       <td class="col-right"><strong>{{ sub.per_unit_cost|floatformat:4 }}</strong></td>
+      <td class="col-right">{{ sub.co2_per_unit|floatformat:4 }} kg</td>
       <td class="col-center"><span class="sign-box"></span></td>
     </tr>
     {% endfor %}
@@ -398,6 +405,7 @@
       <td class="col-right" style="padding: 6px 8px;">{{ routing.per_unit_base_cost|floatformat:4 }}</td>
       <td class="col-right" style="padding: 6px 8px;">{{ routing.per_unit_overhead_cost|floatformat:4 }}</td>
       <td class="col-right" style="padding: 6px 8px; color: #198754;">{{ routing.per_unit_manufacturing_cost|floatformat:4 }}</td>
+      <td class="col-right" style="padding: 6px 8px; color: #27ae60;">{{ routing.per_unit_co2_kg|floatformat:4 }} kg</td>
       <td></td>
     </tr>
   </tfoot>

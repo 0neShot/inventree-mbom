@@ -46,6 +46,7 @@ InvenTree renders PDF reports using Django's template engine. When printing a re
 | `routing.per_unit_overhead_cost` | Overhead cost amortised per unit | `2.48` |
 | `routing.per_unit_manufacturing_cost` | Manufacturing cost amortised per unit (`total / standard_batch_size`) | `27.26` |
 | `routing.total_co2_kg` | Total estimated CO₂ emissions in kilograms for the batch | `0.090000` |
+| `routing.per_unit_co2_kg` | Estimated CO₂ footprint amortised per unit in kilograms | `0.001800` |
 | `routing.used_labor_rates` | Distinct `LaborRate` objects utilized across all operations in this routing | `[LaborRate: Assembler, ...]` |
 | `routing.used_machine_centers` | Distinct `MachineCenter` objects utilized across all operations in this routing | `[MachineCenter: Reflow Oven, ...]` |
 
@@ -79,6 +80,7 @@ When iterating through `routing.top_level_operations` or `routing.all_operations
 | `op.total_cost` | Total operation cost including overhead factor | `84.68` |
 | `op.per_unit_cost` | Total operation cost per unit produced (`base + overhead`) | `2.83` |
 | `op.co2_kg` | CO₂ emissions in kg for this operation | `0.045000` |
+| `op.co2_per_unit` | CO₂ emissions in kg amortised per unit produced for this operation | `0.000900` |
 | `op.sub_operations.all` | Nested sub-operations belonging to this operation | `[Op 1.1, Op 1.2]` |
 
 ---

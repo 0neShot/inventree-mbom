@@ -494,6 +494,11 @@ class PartRouting(models.Model):
             total += op.co2_kg(qty)
         return total
 
+    def per_unit_co2_kg(self) -> Decimal:
+        """Total CO₂ emissions in kg per unit produced."""
+        total = self.total_co2_kg()
+        return total / Decimal(str(self.standard_batch_size))
+
     def per_unit_manufacturing_cost(self) -> Decimal:
         """Per-unit manufacturing cost (total divided by batch size)."""
         total = self.total_manufacturing_cost()
@@ -748,3 +753,10 @@ class RoutingOperation(models.Model):
             self.run_time_per_unit_minutes * qty
         )
         return total_machine_minutes * self.machine_center.co2_factor_per_minute
+
+    def co2_per_unit(self, batch_size: int = None) -> Decimal:
+        """CO₂ emissions in kg per unit produced. Parent ops return 0."""
+        if self.is_parent_operation or not self.machine_center:
+            return Decimal("0.000000")
+        qty = batch_size or (self.routing.standard_batch_size if self.routing else 1)
+        return self.co2_kg(qty) / Decimal(str(qty))

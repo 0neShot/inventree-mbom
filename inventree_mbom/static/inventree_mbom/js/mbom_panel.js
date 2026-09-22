@@ -344,12 +344,13 @@ class MbomPanel {
                 <th style="text-align:right;">Setup (min)</th>
                 <th style="text-align:right;">Cycle (min)</th>
                 <th style="text-align:right;">Unit Cost</th>
+                <th style="text-align:right;" title="Estimated CO₂ footprint per unit">CO₂ / unit</th>
                 <th class="col-actions">${this.isLocked ? 'Status' : 'Actions'}</th>
               </tr>
             </thead>
             <tbody id="mbom-tbody">
               <tr>
-                <td colspan="9" style="text-align:center;padding:36px 16px;color:var(--bs-secondary,#6c757d);">
+                <td colspan="10" style="text-align:center;padding:36px 16px;color:var(--bs-secondary,#6c757d);">
                   <div style="font-size:1.6rem;margin-bottom:8px;">${this.isLocked ? '🔒' : '📋'}</div>
                   <div style="font-weight:600;font-size:0.95rem;margin-bottom:4px;">No operations defined yet</div>
                   <div style="font-size:0.82rem;margin-bottom:14px;opacity:0.8;">
@@ -387,6 +388,7 @@ class MbomPanel {
               <th style="text-align:right;">Setup (min)</th>
               <th style="text-align:right;">Cycle (min)</th>
               <th style="text-align:right;">Unit Cost</th>
+              <th style="text-align:right;" title="Estimated CO₂ footprint per unit">CO₂ / unit</th>
               <th class="col-actions">${this.isLocked ? 'Status' : 'Actions'}</th>
             </tr>
           </thead>
@@ -503,6 +505,26 @@ class MbomPanel {
       ? `<td class="mbom-cost-cell" style="text-align:right;opacity:0.35;" title="Parent description step">—</td>`
       : `<td class="mbom-cost-cell" style="text-align:right;">${cost} ${this.currency}</td>`;
 
+    let co2Val = 0;
+    if (op.per_unit_co2_kg !== undefined) {
+      co2Val = parseFloat(op.per_unit_co2_kg || 0);
+    } else if (op.machine_center) {
+      const mc = (this.machineCenters || []).find(m => (m.pk == op.machine_center || m.id == op.machine_center));
+      const factor = parseFloat(mc?.co2_factor_per_minute || 0);
+      const setupMin = parseFloat(op.setup_time_minutes || 0);
+      const cycleMin = parseFloat(op.run_time_per_unit_minutes || 0);
+      const batch = this.batchSize || 1;
+      co2Val = ((setupMin / batch) + cycleMin) * factor;
+    }
+
+    const co2Cell = isParentWithChildren
+      ? `<td style="text-align:right;opacity:0.35;" title="Parent description step">—</td>`
+      : (co2Val > 0
+          ? `<td style="text-align:right;font-size:0.8rem;color:#27ae60;" title="${co2Val.toFixed(6)} kg CO₂ per unit">
+               <i class="fas fa-leaf" style="font-size:0.7rem;opacity:0.75;"></i> ${co2Val.toFixed(4)} kg
+             </td>`
+          : `<td style="text-align:right;opacity:0.35;">0.0000 kg</td>`);
+
     const actionsCell = this.isLocked
       ? `<td><span class="mbom-badge mbom-badge--locked" style="font-size:0.72rem;padding:2px 6px;"><i class="fas fa-lock"></i> Locked</span></td>`
       : `<td>
@@ -531,6 +553,7 @@ class MbomPanel {
       ${setupCell}
       ${cycleCell}
       ${costCell}
+      ${co2Cell}
       ${actionsCell}`;
 
     tbody.appendChild(row);
