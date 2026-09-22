@@ -395,9 +395,23 @@ class MbomPanel {
       </div>`;
 
     const tbody = document.getElementById('mbom-tbody');
-    ops.forEach(op => {
+    // Natural sequence number comparator: "1" < "2" < "10", "1.1" < "1.2"
+    const seqSort = (a, b) => {
+      const aParts = (a.sequence_number || '').split('.').map(v => parseInt(v, 10) || 0);
+      const bParts = (b.sequence_number || '').split('.').map(v => parseInt(v, 10) || 0);
+      for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+        const aVal = aParts[i] !== undefined ? aParts[i] : -1;
+        const bVal = bParts[i] !== undefined ? bParts[i] : -1;
+        if (aVal !== bVal) return aVal - bVal;
+      }
+      return 0;
+    };
+
+    const sortedOps = [...ops].sort(seqSort);
+    sortedOps.forEach(op => {
       this._appendOpRow(tbody, op, false);
-      (op.sub_operations || []).forEach(sub => {
+      const subOps = [...(op.sub_operations || [])].sort(seqSort);
+      subOps.forEach(sub => {
         this._appendOpRow(tbody, sub, true, op.pk);
       });
     });
@@ -738,7 +752,7 @@ class MbomPanel {
       }
 
       // Re-sequence all operations based on the new visual DOM order:
-      // Top-level operations become 10, 20, 30, 40...
+      // Top-level operations become 1, 2, 3, 4...
       // Sub-steps become <parentSeq>.1, <parentSeq>.2, <parentSeq>.3...
       const parentRows = Array.from(tbody.querySelectorAll('tr.mbom-row--parent'));
       const updates = [];
@@ -746,7 +760,7 @@ class MbomPanel {
       parentRows.forEach((pRow, pIdx) => {
         const pId = parseInt(pRow.dataset.opId);
         const pOp = this._findOp(pId);
-        const newParentSeq = ((pIdx + 1) * 10).toString();
+        const newParentSeq = (pIdx + 1).toString();
 
         if (pOp && pOp.sequence_number !== newParentSeq) {
           updates.push({ id: pId, body: { sequence_number: newParentSeq } });
@@ -805,6 +819,58 @@ class MbomPanel {
     });
   }
 
+  async resequenceOperations() {
+    if (this.isLocked) {
+      this.toast('Part is locked. Changes are prohibited.', 'warning');
+      return;
+    }
+    const tbody = document.getElementById('mbom-tbody');
+    if (!tbody) return;
+
+    const parentRows = Array.from(tbody.querySelectorAll('tr.mbom-row--parent'));
+    if (parentRows.length === 0) return;
+
+    const updates = [];
+    parentRows.forEach((pRow, pIdx) => {
+      const pId = parseInt(pRow.dataset.opId);
+      const pOp = this._findOp(pId);
+      const newParentSeq = (pIdx + 1).toString();
+
+      if (pOp && pOp.sequence_number !== newParentSeq) {
+        updates.push({ id: pId, body: { sequence_number: newParentSeq } });
+        pOp.sequence_number = newParentSeq;
+      }
+
+      const cRows = Array.from(tbody.querySelectorAll(`tr.mbom-row--child[data-parent-id="${pId}"]`));
+      cRows.forEach((cRow, cIdx) => {
+        const cId = parseInt(cRow.dataset.opId);
+        const cOp = this._findOp(cId);
+        const newChildSeq = `${newParentSeq}.${cIdx + 1}`;
+
+        if (cOp && cOp.sequence_number !== newChildSeq) {
+          updates.push({ id: cId, body: { sequence_number: newChildSeq } });
+          cOp.sequence_number = newChildSeq;
+        }
+      });
+    });
+
+    if (updates.length > 0) {
+      try {
+        await Promise.all(updates.map(u => this.api(`/operation/${u.id}/`, {
+          method: 'PATCH',
+          body: JSON.stringify(u.body),
+        })));
+        this.toast('Operations renumbered (1, 2, 3...)');
+        await this.loadOperations();
+        await this.loadCostSummary();
+      } catch (err) {
+        this.toast(`Renumber failed: ${err.message}`, 'error');
+      }
+    } else {
+      this.toast('Sequence numbers are already up to date');
+    }
+  }
+
   _findOp(pk) {
     for (const op of this.ops) {
       if (op.pk === pk) return op;
@@ -825,6 +891,38 @@ class MbomPanel {
       opt.textContent = `${op.sequence_number}: ${op.name}`;
       sel.appendChild(opt);
     });
+
+    if (!sel._mbomChangeBound) {
+      sel._mbomChangeBound = true;
+      sel.addEventListener('change', () => {
+        const idEl = document.getElementById('mbom-op-id');
+        if (idEl && idEl.value) return; // Editing existing, don't overwrite
+        const seqEl = document.getElementById('mbom-op-seq');
+        if (!seqEl) return;
+        const selectedParentId = sel.value ? parseInt(sel.value) : null;
+        if (selectedParentId) {
+          const pOp = this._findOp(selectedParentId);
+          const pSeq = pOp ? pOp.sequence_number : '1';
+          const children = pOp ? (pOp.sub_operations || []) : [];
+          let maxChild = 0;
+          children.forEach(c => {
+            const parts = (c.sequence_number || '').split('.');
+            const lastNum = parseInt(parts[parts.length - 1], 10);
+            if (!isNaN(lastNum) && lastNum > maxChild) maxChild = lastNum;
+          });
+          const nextSub = maxChild > 0 ? maxChild + 1 : children.length + 1;
+          seqEl.value = `${pSeq}.${nextSub}`;
+        } else {
+          const topLevelOps = (this.ops || []).filter(o => !o.parent_operation);
+          let maxSeq = 0;
+          topLevelOps.forEach(o => {
+            const n = parseInt(o.sequence_number, 10);
+            if (!isNaN(n) && n > maxSeq) maxSeq = n;
+          });
+          seqEl.value = (maxSeq > 0 ? maxSeq + 1 : topLevelOps.length + 1).toString();
+        }
+      });
+    }
   }
 
   // ---------------------------------------------------------
@@ -841,6 +939,32 @@ class MbomPanel {
 
     const parentSel = document.getElementById('mbom-op-parent');
     if (parentSel && parentOpId) parentSel.value = parentOpId;
+
+    // Suggest default sequence number starting with 1 in steps of 1
+    const seqEl = document.getElementById('mbom-op-seq');
+    if (seqEl) {
+      if (parentOpId) {
+        const pOp = this._findOp(parseInt(parentOpId));
+        const pSeq = pOp ? pOp.sequence_number : '1';
+        const children = pOp ? (pOp.sub_operations || []) : [];
+        let maxChild = 0;
+        children.forEach(c => {
+          const parts = (c.sequence_number || '').split('.');
+          const lastNum = parseInt(parts[parts.length - 1], 10);
+          if (!isNaN(lastNum) && lastNum > maxChild) maxChild = lastNum;
+        });
+        const nextSub = maxChild > 0 ? maxChild + 1 : children.length + 1;
+        seqEl.value = `${pSeq}.${nextSub}`;
+      } else {
+        const topLevelOps = (this.ops || []).filter(o => !o.parent_operation);
+        let maxSeq = 0;
+        topLevelOps.forEach(o => {
+          const n = parseInt(o.sequence_number, 10);
+          if (!isNaN(n) && n > maxSeq) maxSeq = n;
+        });
+        seqEl.value = (maxSeq > 0 ? maxSeq + 1 : topLevelOps.length + 1).toString();
+      }
+    }
 
     const backdrop = document.getElementById('mbom-op-backdrop');
     if (backdrop) backdrop.classList.add('is-open', 'open');
@@ -1738,11 +1862,22 @@ export async function renderMbomSettingsPanel(target, context) {
       `<option value="${m.pk}" ${step && step.machine_center == m.pk ? 'selected' : ''}>${m.name} (${parseFloat(m.hourly_rate).toFixed(2)} EUR/h)</option>`
     ).join('');
 
+    let nextStepSeq = '1';
+    if (!step) {
+      const rootSteps = (tmpl.steps || []).filter(s => !s.parent_step);
+      let maxSeq = 0;
+      rootSteps.forEach(s => {
+        const n = parseInt(s.sequence_number, 10);
+        if (!isNaN(n) && n > maxSeq) maxSeq = n;
+      });
+      nextStepSeq = (maxSeq > 0 ? maxSeq + 1 : rootSteps.length + 1).toString();
+    }
+
     modalBody.innerHTML = `
       <div style="display:grid;grid-template-columns:100px 1fr;gap:12px;margin-bottom:12px;">
         <div class="mbom-form-group">
           <label class="mbom-form-label">Sequence *</label>
-          <input type="text" id="mbom-sm-s-seq" class="mbom-input" value="${step ? step.sequence_number : '10'}">
+          <input type="text" id="mbom-sm-s-seq" class="mbom-input" value="${step ? step.sequence_number : nextStepSeq}">
         </div>
         <div class="mbom-form-group">
           <label class="mbom-form-label">Step Name *</label>
@@ -1787,6 +1922,30 @@ export async function renderMbomSettingsPanel(target, context) {
         </div>
       </div>
     `;
+
+    const pSel = modalBody.querySelector('#mbom-sm-s-parent');
+    if (pSel && !isEdit) {
+      pSel.addEventListener('change', () => {
+        const seqInput = modalBody.querySelector('#mbom-sm-s-seq');
+        if (!seqInput) return;
+        const pId = pSel.value ? parseInt(pSel.value) : null;
+        if (pId) {
+          const pStep = (tmpl.steps || []).find(s => s.pk == pId);
+          const pSeq = pStep ? pStep.sequence_number : '1';
+          const children = (tmpl.steps || []).filter(s => s.parent_step == pId);
+          let maxChild = 0;
+          children.forEach(c => {
+            const parts = (c.sequence_number || '').split('.');
+            const lastNum = parseInt(parts[parts.length - 1], 10);
+            if (!isNaN(lastNum) && lastNum > maxChild) maxChild = lastNum;
+          });
+          const nextSub = maxChild > 0 ? maxChild + 1 : children.length + 1;
+          seqInput.value = `${pSeq}.${nextSub}`;
+        } else {
+          seqInput.value = nextStepSeq;
+        }
+      });
+    }
 
     currentSaveHandler = async () => {
       const seq = target.querySelector('#mbom-sm-s-seq').value.trim();
@@ -2516,6 +2675,7 @@ export async function renderMbomPanel(target, context) {
         const opId = opRow ? opRow.dataset.opId : (actionEl.dataset.opId || actionEl.dataset.pk);
 
         if (act === 'open-add-op') panel.showAddOpModal();
+        else if (act === 'resequence-ops') panel.resequenceOperations();
         else if (act === 'add-sub-op') panel.showAddSubOpModal(opId);
         else if (act === 'edit-op') panel.showEditOpModal(opId);
         else if (act === 'delete-op') panel.deleteOp(opId);

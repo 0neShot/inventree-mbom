@@ -464,19 +464,16 @@ class ApplyTemplateView(APIView):
                         nums.append(float(op.sequence_number.strip()))
                     except ValueError:
                         pass
-                max_val = max(nums) if nums else len(existing_root_ops) * 10
+                max_val = max(nums) if nums else float(len(existing_root_ops))
                 inc_nums = []
                 for s in incoming_root_steps:
                     try:
                         inc_nums.append(float(s.sequence_number.strip()))
                     except ValueError:
                         pass
-                min_inc = min(inc_nums) if inc_nums else 10.0
+                min_inc = min(inc_nums) if inc_nums else 1.0
 
-                if max_val >= 10:
-                    next_slot = ((int(max_val) // 10) + 1) * 10
-                else:
-                    next_slot = int(max_val) + 1
+                next_slot = int(max_val) + 1
                 offset = max(0, int(next_slot - min_inc))
 
         def get_seq(original_seq, parent_seq=None):

@@ -100,10 +100,10 @@ class Command(BaseCommand):
         self.stdout.write(f"  {'Created' if created else 'Exists'}: {template}")
 
         if created:
-            # Parent step: Op 10 - SMT Assembly
-            op10 = ProcessTemplateStep.objects.create(
+            # Parent step: Op 1 - SMT Assembly
+            op1 = ProcessTemplateStep.objects.create(
                 template=template,
-                sequence_number="10",
+                sequence_number="1",
                 name="SMT Assembly",
                 description="Full SMT placement and soldering",
                 labor_rate=assembler,
@@ -112,11 +112,11 @@ class Command(BaseCommand):
                 run_time_per_unit_minutes=Decimal("3.00"),
             )
 
-            # Sub-steps under Op 10
+            # Sub-steps under Op 1
             ProcessTemplateStep.objects.create(
                 template=template,
-                parent_step=op10,
-                sequence_number="10.1",
+                parent_step=op1,
+                sequence_number="1.1",
                 name="Stencil Paste Application",
                 labor_rate=assembler,
                 setup_time_minutes=Decimal("10.00"),
@@ -124,8 +124,8 @@ class Command(BaseCommand):
             )
             ProcessTemplateStep.objects.create(
                 template=template,
-                parent_step=op10,
-                sequence_number="10.2",
+                parent_step=op1,
+                sequence_number="1.2",
                 name="Pick & Place",
                 labor_rate=assembler,
                 machine_center=reflow,
@@ -134,18 +134,18 @@ class Command(BaseCommand):
             )
             ProcessTemplateStep.objects.create(
                 template=template,
-                parent_step=op10,
-                sequence_number="10.3",
+                parent_step=op1,
+                sequence_number="1.3",
                 name="Reflow Soldering",
                 machine_center=reflow,
                 setup_time_minutes=Decimal("0.00"),
                 run_time_per_unit_minutes=Decimal("0.80"),
             )
 
-            # Parent step: Op 20 - Final Inspection
+            # Parent step: Op 2 - Final Inspection
             ProcessTemplateStep.objects.create(
                 template=template,
-                sequence_number="20",
+                sequence_number="2",
                 name="Final Inspection & Test",
                 description="AOI and functional test",
                 labor_rate=engineer,
@@ -154,7 +154,7 @@ class Command(BaseCommand):
             )
 
             self.stdout.write(
-                f"  Created 5 template steps (Op 10 with 3 sub-steps + Op 20)"
+                f"  Created 5 template steps (Op 1 with 3 sub-steps + Op 2)"
             )
         else:
             self.stdout.write(

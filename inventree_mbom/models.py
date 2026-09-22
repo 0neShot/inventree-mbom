@@ -239,11 +239,11 @@ class ProcessTemplateStep(models.Model):
         help_text=_("Leave blank for top-level operations"),
     )
 
-    # e.g. "10", "10.1", "10.2", "20"
+    # e.g. "1", "1.1", "1.2", "2"
     sequence_number = models.CharField(
         max_length=20,
         verbose_name=_("Sequence Number"),
-        help_text=_("Operation sequence (e.g. 10, 10.1, 20)"),
+        help_text=_("Operation sequence (e.g. 1, 1.1, 2)"),
     )
 
     name = models.CharField(
@@ -517,7 +517,7 @@ class RoutingOperation(models.Model):
     sequence_number = models.CharField(
         max_length=20,
         verbose_name=_("Sequence"),
-        help_text=_("e.g. 10, 10.1, 10.2, 20"),
+        help_text=_("e.g. 1, 1.1, 1.2, 2"),
     )
 
     name = models.CharField(
