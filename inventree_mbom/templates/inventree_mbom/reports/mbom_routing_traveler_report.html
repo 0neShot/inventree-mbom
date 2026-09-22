@@ -289,6 +289,12 @@
     <div class="metric-title">{% trans "Total Machine Cost" %}</div>
     <div class="metric-val">{{ routing.total_machine_cost|floatformat:2 }} <small style="font-size:8pt;font-weight:normal;">EUR</small></div>
   </div>
+  {% if routing.overhead_percent and routing.overhead_percent > 0 %}
+  <div class="metric-card">
+    <div class="metric-title">{% trans "Overhead" %} ({{ routing.overhead_percent|floatformat:1 }}%)</div>
+    <div class="metric-val" style="color:#fd7e14;">{{ routing.total_overhead_cost|floatformat:2 }} <small style="font-size:8pt;font-weight:normal;">EUR</small></div>
+  </div>
+  {% endif %}
   <div class="metric-card accent">
     <div class="metric-title">{% trans "Mfg Cost / Unit" %}</div>
     <div class="metric-val">{{ routing.per_unit_manufacturing_cost|floatformat:2 }} <small style="font-size:8pt;font-weight:normal;">EUR</small></div>
@@ -299,26 +305,30 @@
 <table class="mbom-table">
   <thead>
     <tr>
-      <th style="width: 50px;">{% trans "Seq" %}</th>
+      <th style="width: 45px;">{% trans "Seq" %}</th>
       <th>{% trans "Operation / Instructions" %}</th>
-      <th style="width: 125px;">{% trans "Workcenter / Machine" %}</th>
-      <th style="width: 115px;">{% trans "Labor Role" %}</th>
-      <th style="width: 65px;">{% trans "Setup" %}</th>
-      <th style="width: 75px;">{% trans "Cycle/Unit" %}</th>
-      <th style="width: 75px;">{% trans "Unit Cost" %}</th>
-      <th class="col-center" style="width: 65px;">{% trans "Sign-Off" %}</th>
+      <th style="width: 110px;">{% trans "Workcenter / Machine" %}</th>
+      <th style="width: 100px;">{% trans "Labor Role" %}</th>
+      <th style="width: 55px;" class="col-right">{% trans "Setup" %}</th>
+      <th style="width: 60px;" class="col-right">{% trans "Cycle" %}</th>
+      <th style="width: 65px;" class="col-right">{% trans "Price" %}</th>
+      <th style="width: 65px;" class="col-right">{% trans "Overhead" %}</th>
+      <th style="width: 75px;" class="col-right">{% trans "Total Unit Cost" %}</th>
+      <th class="col-center" style="width: 55px;">{% trans "Sign-Off" %}</th>
     </tr>
   </thead>
   <tbody>
     {% for op in routing.top_level_operations %}
-    <tr>
+    <tr style="{% if op.is_parent_operation %}background-color: #f8f9fa; font-weight: 600;{% endif %}">
       <td><span class="seq-badge">{{ op.sequence_number }}</span></td>
       <td>
         <strong>{{ op.name }}</strong>
-        {% if op.description %}<br><span style="color:#6c757d;font-size:7.5pt;">{{ op.description }}</span>{% endif %}
+        {% if op.description %}<br><span style="color:#6c757d;font-size:7.5pt;font-weight:normal;">{{ op.description }}</span>{% endif %}
       </td>
       <td>
-        {% if op.machine_center %}
+        {% if op.is_parent_operation %}
+          <span style="opacity:0.4;">—</span>
+        {% elif op.machine_center %}
           {{ op.machine_center.name }}
           <span class="rate-sub">{{ op.machine_center.hourly_rate|floatformat:2 }} {{ op.machine_center.currency }}/hr</span>
         {% else %}
@@ -326,16 +336,20 @@
         {% endif %}
       </td>
       <td>
-        {% if op.labor_rate %}
+        {% if op.is_parent_operation %}
+          <span style="opacity:0.4;">—</span>
+        {% elif op.labor_rate %}
           {{ op.labor_rate.name }}
           <span class="rate-sub">{{ op.labor_rate.hourly_rate|floatformat:2 }} {{ op.labor_rate.currency }}/hr</span>
         {% else %}
           —
         {% endif %}
       </td>
-      <td>{{ op.setup_time_minutes|floatformat:1 }} m</td>
-      <td>{{ op.run_time_per_unit_minutes|floatformat:1 }} m</td>
-      <td><strong>{{ op.per_unit_cost|floatformat:2 }}</strong></td>
+      <td class="col-right">{% if op.is_parent_operation %}<span style="opacity:0.4;">—</span>{% else %}{{ op.setup_time_minutes|floatformat:1 }} m{% endif %}</td>
+      <td class="col-right">{% if op.is_parent_operation %}<span style="opacity:0.4;">—</span>{% else %}{{ op.run_time_per_unit_minutes|floatformat:1 }} m{% endif %}</td>
+      <td class="col-right">{% if op.is_parent_operation %}<span style="opacity:0.4;">—</span>{% else %}{{ op.base_per_unit_cost|floatformat:4 }}{% endif %}</td>
+      <td class="col-right">{% if op.is_parent_operation %}<span style="opacity:0.4;">—</span>{% else %}{{ op.overhead_per_unit_cost|floatformat:4 }}{% endif %}</td>
+      <td class="col-right">{% if op.is_parent_operation %}<span style="opacity:0.4;">—</span>{% else %}<strong>{{ op.per_unit_cost|floatformat:4 }}</strong>{% endif %}</td>
       <td class="col-center"><span class="sign-box"></span></td>
     </tr>
 
@@ -365,15 +379,28 @@
           —
         {% endif %}
       </td>
-      <td>{{ sub.setup_time_minutes|floatformat:1 }} m</td>
-      <td>{{ sub.run_time_per_unit_minutes|floatformat:1 }} m</td>
-      <td>{{ sub.per_unit_cost|floatformat:2 }}</td>
+      <td class="col-right">{{ sub.setup_time_minutes|floatformat:1 }} m</td>
+      <td class="col-right">{{ sub.run_time_per_unit_minutes|floatformat:1 }} m</td>
+      <td class="col-right">{{ sub.base_per_unit_cost|floatformat:4 }}</td>
+      <td class="col-right">{{ sub.overhead_per_unit_cost|floatformat:4 }}</td>
+      <td class="col-right"><strong>{{ sub.per_unit_cost|floatformat:4 }}</strong></td>
       <td class="col-center"><span class="sign-box"></span></td>
     </tr>
     {% endfor %}
 
     {% endfor %}
   </tbody>
+  <tfoot>
+    <tr style="font-weight: 700; background-color: #f1f3f5; border-top: 2px solid #ced4da;">
+      <td colspan="4" style="text-align: right; padding: 6px 8px;">{% trans "Total" %}:</td>
+      <td class="col-right" style="padding: 6px 8px;">{{ routing.total_setup_time_minutes|floatformat:1 }} m</td>
+      <td class="col-right" style="padding: 6px 8px;">{{ routing.total_run_time_per_unit_minutes|floatformat:1 }} m</td>
+      <td class="col-right" style="padding: 6px 8px;">{{ routing.per_unit_base_cost|floatformat:4 }}</td>
+      <td class="col-right" style="padding: 6px 8px;">{{ routing.per_unit_overhead_cost|floatformat:4 }}</td>
+      <td class="col-right" style="padding: 6px 8px; color: #198754;">{{ routing.per_unit_manufacturing_cost|floatformat:4 }}</td>
+      <td></td>
+    </tr>
+  </tfoot>
 </table>
 
 <!-- Routing Notes & Quality Instructions -->

@@ -31,14 +31,20 @@ InvenTree renders PDF reports using Django's template engine. When printing a re
 | `routing.source_template.name` | Seed template name (if applied from a template) | `"SMT PCB Assembly Standard"` |
 | `routing.updated` | Last modification datetime | `2026-09-21 10:15:00` |
 | `routing.updated_by` | User instance who last changed the routing | `admin` |
-| `routing.top_level_operations` | Queryset of top-level operations (excluding nested sub-steps), ordered by sequence | `[Op 10, Op 20, ...]` |
-| `routing.all_operations` | Queryset of all operations including sub-steps, ordered by sequence | `[Op 10, Op 10.1, ...]` |
+| `routing.top_level_operations` | Queryset of top-level operations (excluding nested sub-steps), ordered by sequence | `[Op 1, Op 2, ...]` |
+| `routing.all_operations` | Queryset of all operations including sub-steps, ordered by sequence | `[Op 1, Op 1.1, ...]` |
 | `routing.total_setup_time_minutes` | Sum of all setup times in minutes across all operations | `60.0` |
 | `routing.total_run_time_per_unit_minutes` | Sum of all cycle/run times per unit in minutes | `10.8` |
 | `routing.total_labor_cost` | Total labor cost for the standard batch size | `345.50` |
 | `routing.total_machine_cost` | Total machine operating cost for the standard batch size | `397.79` |
-| `routing.total_manufacturing_cost` | Total manufacturing cost (`total_labor_cost + total_machine_cost`) | `743.29` |
-| `routing.per_unit_manufacturing_cost` | Manufacturing cost amortised per unit (`total / standard_batch_size`) | `24.78` |
+| `routing.overhead_percent` | General overhead percentage applied to labor + machine | `10.00` |
+| `routing.overhead_factor` | Multiplicative overhead factor (`1 + overhead_percent / 100`) | `1.10` |
+| `routing.total_overhead_cost` | Total overhead cost for standard batch size | `74.33` |
+| `routing.total_base_cost` | Base manufacturing cost before overhead (`labor + machine`) | `743.29` |
+| `routing.total_manufacturing_cost` | Total manufacturing cost including overhead | `817.62` |
+| `routing.per_unit_base_cost` | Base manufacturing cost amortised per unit before overhead | `24.78` |
+| `routing.per_unit_overhead_cost` | Overhead cost amortised per unit | `2.48` |
+| `routing.per_unit_manufacturing_cost` | Manufacturing cost amortised per unit (`total / standard_batch_size`) | `27.26` |
 | `routing.total_co2_kg` | Total estimated CO₂ emissions in kilograms for the batch | `0.090000` |
 | `routing.used_labor_rates` | Distinct `LaborRate` objects utilized across all operations in this routing | `[LaborRate: Assembler, ...]` |
 | `routing.used_machine_centers` | Distinct `MachineCenter` objects utilized across all operations in this routing | `[MachineCenter: Reflow Oven, ...]` |
@@ -51,12 +57,13 @@ When iterating through `routing.top_level_operations` or `routing.all_operations
 
 | Field / Property / Method | Description | Sample Output |
 | :--- | :--- | :--- |
-| `op.sequence_number` | Operation sequence identifier | `"10"`, `"20.1"` |
+| `op.sequence_number` | Operation sequence identifier | `"1"`, `"1.1"`, `"2"` |
 | `op.name` | Operation title | `"SMT Component Placement"` |
 | `op.description` | Detailed tool notes or work instructions | `"Use nozzle #4 on pick & place"` |
-| `op.labor_rate.name` | Assigned labor classification name | `"Assembler"` |
+| `op.is_parent_operation` | True if this operation has sub-steps (pure description grouping) | `False` |
+| `op.labor_rate.name` | Assigned labor classification name (empty on parent description steps) | `"Assembler"` |
 | `op.labor_rate.hourly_rate` | Hourly labor rate in EUR/currency | `27.98` |
-| `op.machine_center.name` | Assigned machine/workcenter name | `"SMT Pick & Place"` |
+| `op.machine_center.name` | Assigned machine/workcenter name (empty on parent description steps) | `"SMT Pick & Place"` |
 | `op.machine_center.hourly_rate`| Hourly machine operating rate | `60.00` |
 | `op.setup_time_minutes` | Fixed setup time in minutes for this step | `30.0` |
 | `op.run_time_per_unit_minutes` | Unit cycle/run time in minutes | `0.45` |
@@ -66,10 +73,13 @@ When iterating through `routing.top_level_operations` or `routing.all_operations
 | `op.machine_run_cost_per_unit` | Unit machine cost | `0.45` |
 | `op.labor_cost` | Total labor cost amortised over batch size | `24.48` |
 | `op.machine_cost` | Total machine cost amortised over batch size | `52.50` |
-| `op.total_cost` | Total operation cost (`labor_cost + machine_cost`) | `76.98` |
-| `op.per_unit_cost` | Operation cost per unit produced | `2.57` |
+| `op.base_cost` | Base operation cost without overhead (`labor_cost + machine_cost`) | `76.98` |
+| `op.base_per_unit_cost` | Base operation cost per unit without overhead | `2.57` |
+| `op.overhead_per_unit_cost` | Overhead cost per unit for this operation | `0.26` |
+| `op.total_cost` | Total operation cost including overhead factor | `84.68` |
+| `op.per_unit_cost` | Total operation cost per unit produced (`base + overhead`) | `2.83` |
 | `op.co2_kg` | CO₂ emissions in kg for this operation | `0.045000` |
-| `op.sub_operations.all` | Nested sub-operations belonging to this operation | `[Op 10.1, Op 10.2]` |
+| `op.sub_operations.all` | Nested sub-operations belonging to this operation | `[Op 1.1, Op 1.2]` |
 
 ---
 

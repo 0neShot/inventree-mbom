@@ -465,6 +465,21 @@ class PartRouting(models.Model):
         base = self.total_labor_cost(qty) + self.total_machine_cost(qty)
         return base * (self.overhead_percent / Decimal("100.00"))
 
+    def total_base_cost(self, batch_size: int = None) -> Decimal:
+        """Total base manufacturing cost (labor + machine before overhead)."""
+        qty = batch_size or self.standard_batch_size
+        return self.total_labor_cost(qty) + self.total_machine_cost(qty)
+
+    def per_unit_base_cost(self) -> Decimal:
+        """Per-unit base manufacturing cost (labor + machine before overhead)."""
+        total = self.total_base_cost()
+        return total / Decimal(str(self.standard_batch_size))
+
+    def per_unit_overhead_cost(self) -> Decimal:
+        """Per-unit overhead cost."""
+        total = self.total_overhead_cost()
+        return total / Decimal(str(self.standard_batch_size))
+
     def total_manufacturing_cost(self, batch_size: int = None) -> Decimal:
         """Total labor + machine + overhead cost for this routing."""
         qty = batch_size or self.standard_batch_size
@@ -684,6 +699,29 @@ class RoutingOperation(models.Model):
             return Decimal("0.00")
         qty = batch_size or (self.routing.standard_batch_size if self.routing else 1)
         return self.machine_setup_cost() + (self.machine_run_cost_per_unit() * qty)
+
+    def base_cost(self, batch_size: int = None) -> Decimal:
+        """Combined labor + machine cost without overhead. Parent ops return 0."""
+        if self.is_parent_operation:
+            return Decimal("0.00")
+        qty = batch_size or (self.routing.standard_batch_size if self.routing else 1)
+        return self.labor_cost(qty) + self.machine_cost(qty)
+
+    def base_per_unit_cost(self, batch_size: int = None) -> Decimal:
+        """Base per-unit cost (labor + machine) before overhead. Parent ops return 0."""
+        if self.is_parent_operation:
+            return Decimal("0.00")
+        qty = batch_size or (self.routing.standard_batch_size if self.routing else 1)
+        return self.base_cost(qty) / Decimal(str(qty))
+
+    def overhead_per_unit_cost(self, batch_size: int = None) -> Decimal:
+        """Overhead per-unit cost. Parent ops return 0."""
+        if self.is_parent_operation:
+            return Decimal("0.00")
+        qty = batch_size or (self.routing.standard_batch_size if self.routing else 1)
+        base = self.base_per_unit_cost(qty)
+        pct = self.routing.overhead_percent if self.routing else Decimal("0.00")
+        return base * (pct / Decimal("100.00"))
 
     def total_cost(self, batch_size: int = None) -> Decimal:
         """Combined labor + machine cost, scaled by routing overhead factor. Parent ops return 0."""

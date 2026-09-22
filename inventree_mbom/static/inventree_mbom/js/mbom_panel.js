@@ -2376,21 +2376,53 @@ function injectManufacturingPricingAccordion(data) {
   const cur = data.currency || 'EUR';
   let totalSetupMin = 0;
   let totalCycleMin = 0;
+  let totalBaseCost = 0;
+  let totalOverheadCost = 0;
   let totalUnitCost = 0;
+  const overheadPct = parseFloat(data.overhead_percent || 0);
+
   (data.operations || []).forEach(op => {
     const hasSubs = (op.sub_operations || []).length > 0;
     if (!hasSubs) {
       totalSetupMin += parseFloat(op.setup_min || 0);
       totalCycleMin += parseFloat(op.cycle_min || 0);
-      totalUnitCost += parseFloat(op.per_unit_cost || 0);
+      const uCost = parseFloat(op.per_unit_cost || 0);
+      const bCost = op.base_unit_cost !== undefined
+        ? parseFloat(op.base_unit_cost)
+        : (overheadPct > 0 ? (uCost / (1 + overheadPct / 100)) : uCost);
+      const oCost = op.overhead_unit_cost !== undefined
+        ? parseFloat(op.overhead_unit_cost)
+        : (uCost - bCost);
+      totalBaseCost += bCost;
+      totalOverheadCost += oCost;
+      totalUnitCost += uCost;
     }
     (op.sub_operations || []).forEach(sub => {
       totalSetupMin += parseFloat(sub.setup_min || 0);
       totalCycleMin += parseFloat(sub.cycle_min || 0);
-      totalUnitCost += parseFloat(sub.per_unit_cost || 0);
+      const uCost = parseFloat(sub.per_unit_cost || 0);
+      const bCost = sub.base_unit_cost !== undefined
+        ? parseFloat(sub.base_unit_cost)
+        : (overheadPct > 0 ? (uCost / (1 + overheadPct / 100)) : uCost);
+      const oCost = sub.overhead_unit_cost !== undefined
+        ? parseFloat(sub.overhead_unit_cost)
+        : (uCost - bCost);
+      totalBaseCost += bCost;
+      totalOverheadCost += oCost;
+      totalUnitCost += uCost;
     });
   });
-  const displayTotalUnitCost = data.per_unit_manufacturing_cost !== undefined ? parseFloat(data.per_unit_manufacturing_cost).toFixed(4) : totalUnitCost.toFixed(4);
+
+  const baseFromKpi = (data.per_unit_labor !== undefined && data.per_unit_machine !== undefined)
+    ? (parseFloat(data.per_unit_labor || 0) + parseFloat(data.per_unit_machine || 0))
+    : null;
+  const displayTotalBaseCost = baseFromKpi !== null ? baseFromKpi.toFixed(4) : totalBaseCost.toFixed(4);
+  const displayTotalOverhead = (data.per_unit_overhead !== undefined && parseFloat(data.per_unit_overhead) >= 0)
+    ? parseFloat(data.per_unit_overhead || 0).toFixed(4)
+    : totalOverheadCost.toFixed(4);
+  const displayTotalUnitCost = data.per_unit_manufacturing_cost !== undefined
+    ? parseFloat(data.per_unit_manufacturing_cost).toFixed(4)
+    : totalUnitCost.toFixed(4);
 
   const accordion = document.createElement('div');
   accordion.id = 'mbom-pricing-accordion';
@@ -2459,12 +2491,21 @@ function injectManufacturingPricingAccordion(data) {
                   <th>Machine Center</th>
                   <th style="text-align:right;">Setup (min)</th>
                   <th style="text-align:right;">Cycle (min)</th>
-                  <th style="text-align:right;">Unit Cost</th>
+                  <th style="text-align:right;">Price</th>
+                  <th style="text-align:right;">Overhead</th>
+                  <th style="text-align:right;">Total Unit Cost</th>
                 </tr>
               </thead>
               <tbody>
                 ${data.operations.map(op => {
                   const hasSubs = (op.sub_operations || []).length > 0;
+                  const opTotalCost = parseFloat(op.per_unit_cost || 0);
+                  const opBaseCost = op.base_unit_cost !== undefined
+                    ? parseFloat(op.base_unit_cost)
+                    : (overheadPct > 0 ? (opTotalCost / (1 + overheadPct / 100)) : opTotalCost);
+                  const opOverheadCost = op.overhead_unit_cost !== undefined
+                    ? parseFloat(op.overhead_unit_cost)
+                    : (opTotalCost - opBaseCost);
                   return `
                   <tr style="${hasSubs ? 'background:rgba(0,0,0,0.02);font-weight:600;' : ''}">
                     <td><span class="mbom-seq-badge">${op.sequence_number}</span></td>
@@ -2473,9 +2514,19 @@ function injectManufacturingPricingAccordion(data) {
                     <td style="${hasSubs ? 'opacity:0.4;' : ''}">${hasSubs ? '—' : op.machine_name}</td>
                     <td style="text-align:right;${hasSubs ? 'opacity:0.4;' : ''}">${hasSubs ? '—' : parseFloat(op.setup_min || 0).toFixed(2)}</td>
                     <td style="text-align:right;${hasSubs ? 'opacity:0.4;' : ''}">${hasSubs ? '—' : parseFloat(op.cycle_min || 0).toFixed(2)}</td>
-                    <td style="text-align:right;${hasSubs ? 'opacity:0.4;' : 'font-weight:600;'}">${hasSubs ? '—' : `${parseFloat(op.per_unit_cost || 0).toFixed(4)} ${cur}`}</td>
+                    <td style="text-align:right;${hasSubs ? 'opacity:0.4;' : ''}">${hasSubs ? '—' : `${opBaseCost.toFixed(4)} ${cur}`}</td>
+                    <td style="text-align:right;${hasSubs ? 'opacity:0.4;' : ''}">${hasSubs ? '—' : `${opOverheadCost.toFixed(4)} ${cur}`}</td>
+                    <td style="text-align:right;${hasSubs ? 'opacity:0.4;' : 'font-weight:600;'}">${hasSubs ? '—' : `${opTotalCost.toFixed(4)} ${cur}`}</td>
                   </tr>
-                  ${(op.sub_operations || []).map(sub => `
+                  ${(op.sub_operations || []).map(sub => {
+                    const subTotalCost = parseFloat(sub.per_unit_cost || 0);
+                    const subBaseCost = sub.base_unit_cost !== undefined
+                      ? parseFloat(sub.base_unit_cost)
+                      : (overheadPct > 0 ? (subTotalCost / (1 + overheadPct / 100)) : subTotalCost);
+                    const subOverheadCost = sub.overhead_unit_cost !== undefined
+                      ? parseFloat(sub.overhead_unit_cost)
+                      : (subTotalCost - subBaseCost);
+                    return `
                     <tr style="opacity:0.85;">
                       <td style="padding-left:18px;">↳ <span class="mbom-seq-badge" style="font-size:0.75rem;">${sub.sequence_number}</span></td>
                       <td>${sub.name}</td>
@@ -2483,9 +2534,12 @@ function injectManufacturingPricingAccordion(data) {
                       <td>${sub.machine_name}</td>
                       <td style="text-align:right;">${parseFloat(sub.setup_min || 0).toFixed(2)}</td>
                       <td style="text-align:right;">${parseFloat(sub.cycle_min || 0).toFixed(2)}</td>
-                      <td style="text-align:right;font-weight:600;">${parseFloat(sub.per_unit_cost || 0).toFixed(4)} ${cur}</td>
+                      <td style="text-align:right;">${subBaseCost.toFixed(4)} ${cur}</td>
+                      <td style="text-align:right;">${subOverheadCost.toFixed(4)} ${cur}</td>
+                      <td style="text-align:right;font-weight:600;">${subTotalCost.toFixed(4)} ${cur}</td>
                     </tr>
-                  `).join('')}
+                    `;
+                  }).join('')}
                 `;
                 }).join('')}
               </tbody>
@@ -2494,6 +2548,8 @@ function injectManufacturingPricingAccordion(data) {
                   <td colspan="4" style="text-align:right;padding:6px 8px;">Total:</td>
                   <td style="text-align:right;padding:6px 8px;">${totalSetupMin.toFixed(2)} min</td>
                   <td style="text-align:right;padding:6px 8px;">${totalCycleMin.toFixed(2)} min</td>
+                  <td style="text-align:right;padding:6px 8px;">${displayTotalBaseCost} ${cur}</td>
+                  <td style="text-align:right;padding:6px 8px;">${displayTotalOverhead} ${cur}</td>
                   <td style="text-align:right;padding:6px 8px;color:#198754;">${displayTotalUnitCost} ${cur}</td>
                 </tr>
               </tfoot>

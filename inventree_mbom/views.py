@@ -585,6 +585,10 @@ class PartCostSummaryView(APIView):
                     machine_setup += sub_m_setup
                     machine_run += sub_m_run
 
+                    sub_base_cost = sub.base_per_unit_cost(batch_size)
+                    sub_overhead_cost = sub.overhead_per_unit_cost(batch_size)
+                    sub_total_cost = sub.per_unit_cost(batch_size)
+
                     sub_ops_data.append(
                         {
                             "pk": sub.pk,
@@ -598,11 +602,17 @@ class PartCostSummaryView(APIView):
                             ),
                             "setup_min": float(sub.setup_time_minutes),
                             "cycle_min": float(sub.run_time_per_unit_minutes),
-                            "per_unit_cost": str(sub.per_unit_cost(batch_size)),
+                            "base_unit_cost": str(sub_base_cost),
+                            "overhead_unit_cost": str(sub_overhead_cost),
+                            "per_unit_cost": str(sub_total_cost),
                         }
                     )
 
                 has_subs = op.sub_operations.filter(is_active=True).exists()
+                op_base_cost = Decimal("0.0000") if has_subs else op.base_per_unit_cost(batch_size)
+                op_overhead_cost = Decimal("0.0000") if has_subs else op.overhead_per_unit_cost(batch_size)
+                op_total_cost = Decimal("0.0000") if has_subs else op.per_unit_cost(batch_size)
+
                 operations_data.append(
                     {
                         "pk": op.pk,
@@ -623,9 +633,9 @@ class PartCostSummaryView(APIView):
                         "cycle_min": (
                             0.0 if has_subs else float(op.run_time_per_unit_minutes)
                         ),
-                        "per_unit_cost": (
-                            "0.0000" if has_subs else str(op.per_unit_cost(batch_size))
-                        ),
+                        "base_unit_cost": str(op_base_cost),
+                        "overhead_unit_cost": str(op_overhead_cost),
+                        "per_unit_cost": str(op_total_cost),
                         "sub_operations": sub_ops_data,
                     }
                 )
