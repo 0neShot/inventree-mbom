@@ -41,6 +41,15 @@ from decimal import Decimal, ROUND_HALF_UP
 logger = logging.getLogger("inventree_mbom.pricing")
 
 
+def get_part_pricing_model():
+    """PartPricing moved from the part app to the pricing app in InvenTree 1.7."""
+    try:
+        from pricing.models import PartPricing
+    except ImportError:
+        from part.models import PartPricing
+    return PartPricing
+
+
 # =========================================================
 # Core Cost Calculation
 # =========================================================
@@ -237,7 +246,7 @@ class MbomPricingService:
         Returns True if successfully scheduled, False otherwise.
         """
         try:
-            from part.models import PartPricing
+            PartPricing = get_part_pricing_model()
 
             pricing, _ = PartPricing.objects.get_or_create(part_id=part_id)
             pricing.schedule_for_update()
@@ -258,7 +267,7 @@ class MbomPricingService:
         background updates for parent assemblies.
         """
         try:
-            from part.models import PartPricing
+            PartPricing = get_part_pricing_model()
             from .models import PartRouting
 
             if isinstance(part, (int, str)):
@@ -415,7 +424,7 @@ class MbomPricingService:
         Returns True if written, False if not supported or failed.
         """
         try:
-            from part.models import PartPricing
+            PartPricing = get_part_pricing_model()
 
             pricing, _ = PartPricing.objects.get_or_create(part_id=part.pk)
             mfg = get_mbom_unit_cost(part)

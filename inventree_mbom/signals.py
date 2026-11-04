@@ -14,6 +14,8 @@ Pricing Bridge:
 """
 
 import logging
+from importlib.util import find_spec
+
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 
@@ -142,7 +144,11 @@ def on_part_routing_saved(sender, instance, **kwargs):
 # =========================================================
 
 
-@receiver(post_save, sender="part.PartPricing")
+# PartPricing moved from the part app to the pricing app in InvenTree 1.7.
+PART_PRICING = "pricing.PartPricing" if find_spec("pricing") else "part.PartPricing"
+
+
+@receiver(post_save, sender=PART_PRICING)
 def on_part_pricing_saved(sender, instance, **kwargs):
     """When InvenTree recalculates PartPricing, re-roll mBOM costs into overall_min/max."""
     try:
